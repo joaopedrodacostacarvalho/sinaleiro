@@ -1,0 +1,40 @@
+# Controle de versão
+.git
+.gitignore
+.github
+
+# Dependências (o Docker instalará as próprias via npm install)
+node_modules
+**/node_modules
+
+# Arquivos de build locais
+dist
+build
+**/dist
+**/build
+
+# Variáveis de ambiente (devem ser passadas via docker-compose)
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Documentação e arquivos auxiliares
+README.md
+**/*.md
+LICENSE
+docker-compose*.yml
+**/Dockerfile*
+.dockerignore
+
+# Logs e testes
+*.log
+npm-debug.log*
+coverage
+**/coverage
+
+# Configurações de editor e sistema
+.vscode
+.idea
+.DS_Store
+Thumbs.db

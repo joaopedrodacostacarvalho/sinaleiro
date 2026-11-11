@@ -1,0 +1,14 @@
+{
+  "name": "sinaleiro",
+  "version": "1.0.0",
+  "description": "Uma plataforma colaborativa para a cadeira de empreendedorismo do IFPE Campus Jaboatão dos Guararapes",
+  "author": "João Pedro da Costa Carvalho",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "workspaces": [
+    "apps/api"
+  ]
+}
