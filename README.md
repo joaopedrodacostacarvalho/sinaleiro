@@ -25,8 +25,6 @@ sinaleiro/
 * **Gerenciamento de Pacotes:** npm workspaces
 * **Containerização:** Docker & Docker Compose (com *hot reload* ativo)
 
----
-
 ## Pré-requisitos
 
 Para rodar este projeto localmente, você precisa ter instalado em sua máquina:
@@ -34,8 +32,6 @@ Para rodar este projeto localmente, você precisa ter instalado em sua máquina:
 * [Docker Compose](https://docker.com)
 
 *(Opcional)* Caso queira rodar comandos ou instalar pacotes fora do contêiner, recomenda-se o **Node.js v24+**.
-
----
 
 ## Como Rodar o Projeto (Desenvolvimento)
 
@@ -62,8 +58,6 @@ Para rodar este projeto localmente, você precisa ter instalado em sua máquina:
    Após a inicialização do NestJS, a API estará disponível em:
    `http://localhost:3000`
 
----
-
 ## Comandos Úteis
 
 * **Parar os contêineres:**
@@ -87,8 +81,6 @@ Para rodar este projeto localmente, você precisa ter instalado em sua máquina:
   ```bash
   npx @nestjs/cli generate resource <nome-do-recurso> --project api
   ```
-
----
 
 ## Status Atual
 
