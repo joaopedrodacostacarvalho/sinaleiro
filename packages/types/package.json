@@ -1,0 +1,19 @@
+{
+  "name": "@sinaleiro/types",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "exports": {
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

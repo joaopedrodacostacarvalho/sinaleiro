@@ -1,4 +1,22 @@
 services:
+  db:
+    image: postgres:17-alpine
+    container_name: sinaleiro_db
+    restart: unless-stopped
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER:-sinaleiro}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sinaleiro_dev}
+      POSTGRES_DB: ${DB_NAME:-sinaleiro_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-sinaleiro} -d ${DB_NAME:-sinaleiro_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: .
@@ -6,6 +24,9 @@ services:
     container_name: backend_api_dev
     ports:
       - "${PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - .:/app
       - /app/node_modules
@@ -15,3 +36,6 @@ services:
     env_file:
       - path: .env
         required: false
+
+volumes:
+  postgres_data:
