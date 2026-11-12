@@ -106,6 +106,6 @@ Para rodar este projeto localmente, você precisa ter instalado em sua máquina:
 - [x] Pacote de tipos compartilhados (`@sinaleiro/types`)
 - [x] Módulo de Autenticação com Firebase Admin SDK e Guard de rotas
 - [x] Modelagem e Entidades TypeORM (`Usuario`, `Linha`, `LinhaSentido`, `Estacao`, `Trem`, `Reporte`, `ConfirmacaoReporte`)
-- [ ] Seed do banco de dados com linhas e estações reais do Metrorec
+- [x] Seed do banco de dados com linhas e estações reais do Metrorec
 - [ ] Sincronização de usuários Firebase com o PostgreSQL e regras de negócio
 - [ ] Aplicação Frontend Web (`apps/web`)
