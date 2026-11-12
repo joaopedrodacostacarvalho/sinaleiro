@@ -87,5 +87,5 @@ Para rodar este projeto localmente, você precisa ter instalado em sua máquina:
 - [x] Estrutura base do Monorepo (`npm workspaces`)
 - [x] Ambiente Docker de desenvolvimento com Node 24 Alpine e Hot Reload
 - [x] Setup inicial da API em NestJS (`apps/api`)
-- [ ] Configuração do Banco de Dados e ORM
+- [x] Configuração do Banco de Dados e ORM
 - [ ] Implementação das rotas e regras de negócio
