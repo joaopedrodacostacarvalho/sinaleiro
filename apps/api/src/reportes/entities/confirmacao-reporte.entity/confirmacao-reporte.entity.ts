@@ -6,6 +6,7 @@ import {
   ManyToOne,
   JoinColumn,
   type Relation,
+  Unique,
 } from 'typeorm';
 import { Reporte } from '../reporte.entity.js';
 import { Usuario } from '../../../usuarios/entities/usuario.entity.js';
