@@ -5,12 +5,15 @@ WORKDIR /app
 # Copia os manifestos da raiz e da API
 COPY package*.json ./
 COPY apps/api/package*.json ./apps/api/
+COPY packages/types/package*.json ./packages/types/
 
 # Instala as dependências do workspace da API
-RUN npm install --workspace=apps/api
+RUN npm install
 
 # Copia o código-fonte
 COPY . .
+
+RUN npm run build --workspace=@sinaleiro/types
 
 EXPOSE 3000
 
