@@ -4,8 +4,12 @@ import { CreateUsuarioDto } from './dto/create-usuario.dto.js';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto.js';
 import { DecodedIdToken } from 'firebase-admin/auth';
 import { FirebaseAuthGuard } from '../auth/firebase-auth/firebase-auth.guard.js';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('usuarios')
+@ApiBearerAuth('firebase-auth')
 @Controller('usuarios')
+@UseGuards(FirebaseAuthGuard)
 export class UsuariosController {
   constructor(private readonly usuariosService: UsuariosService) { }
 
