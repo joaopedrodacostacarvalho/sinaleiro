@@ -1,4 +1,4 @@
-import { PartialType } from '@nestjs/mapped-types'
+import { PartialType } from '@nestjs/swagger';
 import { CreateTremDto } from './create-trem.dto.js';
 
-export class UpdateTrenDto extends PartialType(CreateTremDto) { }
+export class UpdateTremDto extends PartialType(CreateTremDto) { }

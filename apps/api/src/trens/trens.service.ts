@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { CreateTremDto } from './dto/create-trem.dto.js';
-import { UpdateTrenDto } from './dto/update-trem.dto.js';
+import { UpdateTremDto } from './dto/update-trem.dto.js';
 
 @Injectable()
 export class TrensService {
-  create(createTrenDto: CreateTremDto) {
+  create(_createTrenDto: CreateTremDto) {
     return 'This action adds a new tren';
   }
 
@@ -16,7 +16,7 @@ export class TrensService {
     return `This action returns a #${id} tren`;
   }
 
-  update(id: number, updateTrenDto: UpdateTrenDto) {
+  update(id: number, _updateTrenDto: UpdateTremDto) {
     return `This action updates a #${id} tren`;
   }
 
