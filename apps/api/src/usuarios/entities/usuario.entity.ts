@@ -14,7 +14,7 @@ export class Usuario {
   google_id: string | null;
 
   @Column({ type: 'varchar', length: 255 })
-  name: string;
+  nome: string;
 
   @Column({ type: 'varchar', length: 255, unique: true })
   email: string;
