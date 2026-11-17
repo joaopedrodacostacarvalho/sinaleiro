@@ -24,20 +24,20 @@ export class TrensController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.trensService.findOne(+id);
+    return this.trensService.findOne(id);
   }
 
   @Patch(':id')
   @UseGuards(FirebaseAuthGuard)
   @ApiBearerAuth('firebase-auth')
   update(@Param('id') id: string, @Body() updateTrenDto: UpdateTremDto) {
-    return this.trensService.update(+id, updateTrenDto);
+    return this.trensService.update(id, updateTrenDto);
   }
 
   @Delete(':id')
   @UseGuards(FirebaseAuthGuard)
   @ApiBearerAuth('firebase-auth')
   remove(@Param('id') id: string) {
-    return this.trensService.remove(+id);
+    return this.trensService.remove(id);
   }
 }

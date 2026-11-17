@@ -12,15 +12,15 @@ export class TrensService {
     return `This action returns all trens`;
   }
 
-  findOne(id: number) {
+  findOne(id: string) {
     return `This action returns a #${id} tren`;
   }
 
-  update(id: number, _updateTrenDto: UpdateTremDto) {
+  update(id: string, _updateTrenDto: UpdateTremDto) {
     return `This action updates a #${id} tren`;
   }
 
-  remove(id: number) {
+  remove(id: string) {
     return `This action removes a #${id} tren`;
   }
 }

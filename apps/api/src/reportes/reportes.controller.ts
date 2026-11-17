@@ -26,18 +26,18 @@ export class ReportesController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.reportesService.findOne(+id);
+    return this.reportesService.findOne(id);
   }
 
   @Patch(':id')
   @UseGuards(FirebaseAuthGuard)
   update(@Param('id') id: string, @Body() updateReporteDto: UpdateReporteDto) {
-    return this.reportesService.update(+id, updateReporteDto);
+    return this.reportesService.update(id, updateReporteDto);
   }
 
   @Delete(':id')
   @UseGuards(FirebaseAuthGuard)
   remove(@Param('id') id: string) {
-    return this.reportesService.remove(+id);
+    return this.reportesService.remove(id);
   }
 }
