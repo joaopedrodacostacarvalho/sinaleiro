@@ -30,7 +30,7 @@ export class SeedService implements OnApplicationBootstrap {
     // se já houver linhas cadastradas, o banco não está zerado
     const totalLinhas = await this.linhaRepo.count();
     if (totalLinhas > 0) {
-      this.logger.log('⏭️ Banco já populado. Seed automático ignorado.');
+      this.logger.log('Banco já populado. Seed automático ignorado.');
       return;
     }
 

@@ -1,9 +1,13 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from '../auth.service.js';
+import { UsuariosService } from '../../usuarios/usuarios.service.js';
 
 @Injectable()
 export class FirebaseAuthGuard implements CanActivate {
-  constructor(private readonly authService: AuthService) { }
+  constructor(
+    private readonly authService: AuthService,
+    private readonly usuariosService: UsuariosService,
+  ) { }
 
   async canActivate(
     context: ExecutionContext,
@@ -12,14 +16,16 @@ export class FirebaseAuthGuard implements CanActivate {
     const authHeader = request.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith(`Bearer `)) {
-      throw new UnauthorizedException("Missing or invalid Authorization header");
+      throw new UnauthorizedException("Token de autenticação ausente ou inválido");
     }
 
     const token = authHeader.split(' ')[1];
-    const decodedUser = await this.authService.verifyToken(token);
+    const decodedToken = await this.authService.verifyToken(token);
 
-    // Associa o payload do usuário que vem do Firebase para o obj request
-    request.user = decodedUser;
+    // Sincroniza com o PostgresSQL e anexa toda a entidade na requisição
+    const usuario = await this.usuariosService.findOrCreateFromFirebase(decodedToken)
+    request.user = usuario;
+
     return true;
   }
 }
