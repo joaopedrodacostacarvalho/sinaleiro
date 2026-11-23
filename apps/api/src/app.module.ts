@@ -10,6 +10,8 @@ import { TrensModule } from './trens/trens.module.js';
 import { ReportesModule } from './reportes/reportes.module.js';
 import { ReputacaoModule } from './reputacao/reputacao.module.js'
 import { DatabaseModule } from './database/database.module.js';
+import { APP_FILTER } from '@nestjs/core';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 
 @Module({
   imports: [
@@ -33,6 +35,12 @@ import { DatabaseModule } from './database/database.module.js';
     DatabaseModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_FILTER,
+      useClass: HttpExceptionFilter,
+    }
+  ],
 })
 export class AppModule { }
