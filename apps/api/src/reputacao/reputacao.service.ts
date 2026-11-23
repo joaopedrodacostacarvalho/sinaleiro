@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { EventoReputacao } from '@sinaleiro/types/enums';
 
 import { Usuario } from '../usuarios/entities/usuario.entity.js';
@@ -24,13 +24,18 @@ export class ReputacaoService {
     return getPeso(reputacao);
   }
 
-  async aplicarEvento(usuarioId: string, evento: EventoReputacao): Promise<Usuario> {
-    const usuario = await this.usuarioRepo.findOne({ where: { id: usuarioId } });
+  async aplicarEvento(
+    usuarioId: string,
+    evento: EventoReputacao,
+    manager?: EntityManager,
+  ): Promise<Usuario> {
+    const repo = manager ? manager.getRepository(Usuario) : this.usuarioRepo;
+    const usuario = await repo.findOne({ where: { id: usuarioId } });
     if (!usuario) throw new NotFoundException('Usuário não encontrado');
 
     const delta = DELTAS[evento];
     usuario.reputacao = Math.max(PISO_REPUTACAO, usuario.reputacao + delta);
 
-    return this.usuarioRepo.save(usuario);
+    return repo.save(usuario);
   }
 }

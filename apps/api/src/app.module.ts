@@ -8,6 +8,7 @@ import { LinhasModule } from './linhas/linhas.module.js';
 import { EstacoesModule } from './estacoes/estacoes.module.js';
 import { TrensModule } from './trens/trens.module.js';
 import { ReportesModule } from './reportes/reportes.module.js';
+import { ReputacaoModule } from './reputacao/reputacao.module.js'
 import { DatabaseModule } from './database/database.module.js';
 
 @Module({
@@ -28,6 +29,7 @@ import { DatabaseModule } from './database/database.module.js';
     EstacoesModule,
     TrensModule,
     ReportesModule,
+    ReputacaoModule,
     DatabaseModule,
   ],
   controllers: [AppController],
