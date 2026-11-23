@@ -1,4 +1,4 @@
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn, type Relation } from 'typeorm';
+import { Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn, type Relation } from 'typeorm';
 import { Reporte } from '../../reportes/entities/reporte.entity.js';
 import { ConfirmacaoReporte } from '../../reportes/entities/confirmacao-reporte.entity/confirmacao-reporte.entity.js';
 
@@ -22,7 +22,7 @@ export class Usuario {
   @Column({ type: 'smallint', default: 0 })
   reputacao: number;
 
-  @Column({ type: 'timestamp' })
+  @CreateDateColumn({ type: 'timestamp' })
   data_cadastro: Date;
 
   @OneToMany(() => Reporte, (reporte) => reporte.usuario)

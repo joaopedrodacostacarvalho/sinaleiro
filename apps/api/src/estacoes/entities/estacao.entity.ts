@@ -8,7 +8,7 @@ export class Estacao {
   id: number;
 
   @Column({ type: 'varchar', length: 255 })
-  nome: String;
+  nome: string;
 
   @Column({ type: 'decimal', precision: 10, scale: 8 })
   latitude: number;

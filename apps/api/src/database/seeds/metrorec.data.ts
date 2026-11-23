@@ -16,8 +16,8 @@ export interface LinhaSeed {
 export const METROREC_DATA: LinhaSeed[] = [
   {
     nome: 'Linha Centro - Ramal Camaragibe',
-    cor: '#E31C23', // Vermelho
-    sentidos: [Sentido.IDA, Sentido.VOLTA],
+    cor: '#E31C23',
+    sentidos: [Sentido.RECIFE, Sentido.CAMARAGIBE],
     estacoes: [
       { nome: 'Recife', latitude: -8.067794, longitude: -34.885139 },
       { nome: 'Joana Bezerra', latitude: -8.073611, longitude: -34.896389 },
@@ -38,8 +38,8 @@ export const METROREC_DATA: LinhaSeed[] = [
   },
   {
     nome: 'Linha Centro - Ramal Jaboatão',
-    cor: '#F37021', // Laranja
-    sentidos: [Sentido.IDA, Sentido.VOLTA],
+    cor: '#F37021',
+    sentidos: [Sentido.RECIFE, Sentido.JABOATAO],
     estacoes: [
       { nome: 'Cavaleiro', latitude: -8.088889, longitude: -34.991944 },
       { nome: 'Floriano', latitude: -8.098611, longitude: -35.004167 },
@@ -49,8 +49,8 @@ export const METROREC_DATA: LinhaSeed[] = [
   },
   {
     nome: 'Linha Sul',
-    cor: '#0054A6', // Azul
-    sentidos: [Sentido.IDA, Sentido.VOLTA],
+    cor: '#0054A6',
+    sentidos: [Sentido.RECIFE, Sentido.CAJUEIRO_SECO],
     estacoes: [
       { nome: 'Imbiribeira', latitude: -8.093056, longitude: -34.906111 },
       { nome: 'Antônio Falcão', latitude: -8.107222, longitude: -34.910278 },
@@ -65,8 +65,8 @@ export const METROREC_DATA: LinhaSeed[] = [
   },
   {
     nome: 'Linha Diesel (VLT) - Ramal Cabo',
-    cor: '#00A651', // Verde
-    sentidos: [Sentido.IDA, Sentido.VOLTA],
+    cor: '#00A651',
+    sentidos: [Sentido.RECIFE, Sentido.CABO],
     estacoes: [
       { nome: 'Ângelo de Souza', latitude: -8.203056, longitude: -34.946944 },
       { nome: 'Pontezinha', latitude: -8.221667, longitude: -34.965833 },
@@ -77,8 +77,8 @@ export const METROREC_DATA: LinhaSeed[] = [
   },
   {
     nome: 'Linha Diesel (VLT) - Ramal Curado',
-    cor: '#7AC143', // Verde Claro
-    sentidos: [Sentido.IDA, Sentido.VOLTA],
+    cor: '#7AC143',
+    sentidos: [Sentido.RECIFE, Sentido.SOTAVE],
     estacoes: [
       { nome: 'Jorge Lins', latitude: -8.075278, longitude: -34.996111 },
       { nome: 'Marcos Freire', latitude: -8.125556, longitude: -34.961944 },

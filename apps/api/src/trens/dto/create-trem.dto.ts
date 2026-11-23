@@ -12,9 +12,9 @@ export class CreateTremDto {
   linha_id: number;
 
   @ApiProperty({
-    description: 'Sentido da viagem',
+    description: 'Sentido da viagem (terminal de destino)',
     enum: Sentido,
-    example: Sentido.IDA,
+    example: Sentido.RECIFE,
   })
   @IsEnum(Sentido)
   sentido: Sentido;
