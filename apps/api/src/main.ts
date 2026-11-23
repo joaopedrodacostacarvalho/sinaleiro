@@ -1,10 +1,26 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
+import { buildCorsOptions } from './common/config/cors.config.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  const isProd = process.env.NODE_ENV === 'production';
+
+  app.set('trust proxy', 1);
+
+  app.use(
+    helmet({
+      contentSecurityPolicy: isProd ? undefined : false,
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+
+  app.enableCors(buildCorsOptions());
 
   app.useGlobalPipes(
     new ValidationPipe({

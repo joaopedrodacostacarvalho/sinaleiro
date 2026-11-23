@@ -10,11 +10,24 @@ import { TrensModule } from './trens/trens.module.js';
 import { ReportesModule } from './reportes/reportes.module.js';
 import { ReputacaoModule } from './reputacao/reputacao.module.js'
 import { DatabaseModule } from './database/database.module.js';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([
+      {
+        name: 'short',
+        ttl: 1_000,
+        limit: 10,
+      },
+      {
+        name: 'default',
+        ttl: Number(process.env.THROTTLE_TTL_MS ?? 60_000),
+        limit: Number(process.env.THROTTLE_LIMIT ?? 60),
+      },
+    ]),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: process.env.DB_HOST || 'localhost',
@@ -40,6 +53,10 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
     {
       provide: APP_FILTER,
       useClass: HttpExceptionFilter,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     }
   ],
 })
