@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Reporte } from '../reporte.entity.js';
 import { Usuario } from '../../../usuarios/entities/usuario.entity.js';
+import { TipoConfirmacao } from '@sinaleiro/types/enums';
 
 @Entity('confirmacao_reporte')
 @Unique(['reporte_id', 'usuario_id'])
@@ -23,8 +24,11 @@ export class ConfirmacaoReporte {
   @Column({ type: 'uuid' })
   usuario_id: string;
 
-  @Column({ type: 'boolean' })
-  confirmacao: boolean;
+  @Column({ type: 'enum', enum: TipoConfirmacao })
+  tipo: TipoConfirmacao;
+
+  @Column({ type: 'float', default: 1.0 })
+  peso: number;
 
   @CreateDateColumn({ type: 'timestamp' })
   data_hora: Date;
