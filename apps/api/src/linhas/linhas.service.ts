@@ -1,26 +1,47 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+
 import { CreateLinhaDto } from './dto/create-linha.dto.js';
 import { UpdateLinhaDto } from './dto/update-linha.dto.js';
+import { Linha } from './entities/linha.entity.js';
 
 @Injectable()
 export class LinhasService {
-  create(_createLinhaDto: CreateLinhaDto) {
-    return 'This action adds a new linha';
+  constructor(
+    @InjectRepository(Linha)
+    private readonly linhaRepo: Repository<Linha>,
+  ) { }
+
+  async create(createLinhaDto: CreateLinhaDto): Promise<Linha> {
+    const linha = this.linhaRepo.create(createLinhaDto);
+    return this.linhaRepo.save(linha);
   }
 
-  findAll() {
-    return `This action returns all linhas`;
+  async findAll(): Promise<Linha[]> {
+    return this.linhaRepo.find({
+      order: { id: 'ASC' },
+    });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} linha`;
+  async findOne(id: number): Promise<Linha> {
+    const linha = await this.linhaRepo.findOne({
+      where: { id },
+    });
+    if (!linha) {
+      throw new NotFoundException(`Linha #${id} não encontrada`);
+    }
+    return linha;
   }
 
-  update(id: number, _updateLinhaDto: UpdateLinhaDto) {
-    return `This action updates a #${id} linha`;
+  async update(id: number, updateLinhaDto: UpdateLinhaDto): Promise<Linha> {
+    const linha = await this.findOne(id);
+    Object.assign(linha, updateLinhaDto);
+    return this.linhaRepo.save(linha);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} linha`;
+  async remove(id: number): Promise<void> {
+    const linha = await this.findOne(id);
+    await this.linhaRepo.remove(linha);
   }
 }

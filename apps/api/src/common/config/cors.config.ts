@@ -2,22 +2,37 @@ import { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.int
 
 const ORIGENS_DEV_PADRAO = [
   'http://localhost:5173',
+  'http://127.0.0.1:5173',
   'http://localhost:4173',
+  'http://127.0.0.1:4173',
   'http://localhost:3000',
+  'http://127.0.0.1:3000',
 ];
+
+function normalizarOrigem(origin: string): string {
+  return origin.trim().replace(/\/+$/, '');
+}
 
 export function parseCorsOrigins(
   rawOrigins = process.env.CORS_ORIGINS,
   nodeEnv = process.env.NODE_ENV,
 ): string[] | boolean {
+  const isProd = nodeEnv === 'production';
+
   if (rawOrigins && rawOrigins.trim().length > 0) {
-    return rawOrigins
+    const configuradas = rawOrigins
       .split(',')
-      .map((origin) => origin.trim())
+      .map(normalizarOrigem)
       .filter((origin) => origin.length > 0);
+
+    if (isProd) {
+      return configuradas;
+    }
+
+    return Array.from(new Set([...ORIGENS_DEV_PADRAO, ...configuradas]));
   }
 
-  return nodeEnv === 'production' ? false : ORIGENS_DEV_PADRAO;
+  return isProd ? false : ORIGENS_DEV_PADRAO;
 }
 
 export function buildCorsOptions(): CorsOptions {

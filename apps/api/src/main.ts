@@ -17,6 +17,8 @@ async function bootstrap() {
     helmet({
       contentSecurityPolicy: isProd ? undefined : false,
       crossOriginEmbedderPolicy: false,
+      crossOriginResourcePolicy: isProd ? undefined : false,
+      hsts: isProd ? undefined : false,
     }),
   );
 
