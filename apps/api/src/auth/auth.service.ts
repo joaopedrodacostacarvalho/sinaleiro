@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, OnModuleInit, UnauthorizedException } from '@nestjs/common';
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth, type DecodedIdToken } from 'firebase-admin/auth';
 
@@ -22,5 +22,15 @@ export class AuthService implements OnModuleInit {
     } catch {
       throw new UnauthorizedException("Invalid or expired Firebase token");
     }
+  }
+
+  async createCustomToken(uid: string): Promise<string> {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ForbiddenException(
+        'Geração de custom token desabilitada em produção',
+      );
+    }
+
+    return getAuth().createCustomToken(uid);
   }
 }
