@@ -34,4 +34,6 @@ jobs:
         run: npm run build --workspace=apps/api
 
       - name: Executar Testes Unitários (Vitest)
+        env:
+          NODE_ENV: test
         run: npm test --workspace=apps/api
