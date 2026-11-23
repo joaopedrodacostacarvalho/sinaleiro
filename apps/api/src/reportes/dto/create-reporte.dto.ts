@@ -75,14 +75,6 @@ export class CreateReporteDto {
   status_trem?: StatusTrem;
 
   @ApiPropertyOptional({
-    description: 'Data/hora de expiração do reporte (ISO 8601)',
-    format: 'date-time',
-  })
-  @IsOptional()
-  @IsDateString()
-  data_hora_expiracao?: string;
-
-  @ApiPropertyOptional({
     description: 'Confiança inicial do reporte (0–100)',
     example: 1,
     minimum: 0,
