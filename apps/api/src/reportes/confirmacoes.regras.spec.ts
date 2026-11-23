@@ -3,7 +3,7 @@ import {
   limiaresPorTipo, decidirReporte, efeitoReputacao,
 } from './confirmacoes.regras.js';
 import {
-  StatusEstacao, TipoConfirmacao, TipoReporte, EventoReputacao,
+  TipoConfirmacao, TipoReporte, EventoReputacao,
 } from '@sinaleiro/types/enums';
 import { makeConfirmacao, makeReporte } from '../../test/fixtures.js';
 

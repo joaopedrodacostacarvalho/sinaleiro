@@ -19,7 +19,7 @@ export class AuthService implements OnModuleInit {
   async verifyToken(token: string): Promise<DecodedIdToken> {
     try {
       return await getAuth().verifyIdToken(token);
-    } catch (error) {
+    } catch {
       throw new UnauthorizedException("Invalid or expired Firebase token");
     }
   }

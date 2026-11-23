@@ -1,5 +1,5 @@
 import {
-  StatusEstacao, StatusLinha, StatusTrem, TipoReporte, TipoConfirmacao,
+  StatusEstacao, TipoReporte, TipoConfirmacao,
 } from '@sinaleiro/types/enums';
 
 export function makeUsuario(overrides: Record<string, unknown> = {}): any {
@@ -62,7 +62,7 @@ export function makeConfirmacao(overrides: Record<string, unknown> = {}): any {
   };
 }
 
-export function mockRepo<T>(): any {
+export function mockRepo<_T>(): any {
   return {
     find: vi.fn().mockResolvedValue([]),
     findOne: vi.fn().mockResolvedValue(null),

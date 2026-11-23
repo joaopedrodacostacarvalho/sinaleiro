@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { TrensService } from './trens.service.js';
 import { Sentido } from '@sinaleiro/types/enums';
-import { makeLinha, makeReporte, makeUsuario } from '../../test/fixtures.js';
+import { makeReporte, makeUsuario } from '../../test/fixtures.js';
 
 describe('TrensService.resolverTrem() — Regra 7.1', () => {
   let service: TrensService;

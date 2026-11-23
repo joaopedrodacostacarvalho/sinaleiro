@@ -154,10 +154,11 @@ export class ReportesService {
           }
         }
 
-        const renovado = await this.reporteRepo.save({
-          ...existente,
-          data_hora_expiracao: expiracaoEstendida,
-        });
+        const renovado = await this.reporteRepo.save(
+          Object.assign({} as Reporte, existente, {
+            data_hora_expiracao: expiracaoEstendida,
+          }),
+        );
 
         await this.statusService?.invalidarAlvo?.(renovado);
         return renovado;

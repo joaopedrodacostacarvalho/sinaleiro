@@ -4,7 +4,7 @@ import { UpdateLinhaDto } from './dto/update-linha.dto.js';
 
 @Injectable()
 export class LinhasService {
-  create(createLinhaDto: CreateLinhaDto) {
+  create(_createLinhaDto: CreateLinhaDto) {
     return 'This action adds a new linha';
   }
 
@@ -16,7 +16,7 @@ export class LinhasService {
     return `This action returns a #${id} linha`;
   }
 
-  update(id: number, updateLinhaDto: UpdateLinhaDto) {
+  update(id: number, _updateLinhaDto: UpdateLinhaDto) {
     return `This action updates a #${id} linha`;
   }
 

@@ -31,6 +31,8 @@ export interface StatusTremResultado {
   atualizado_em: Date;
 }
 
+type CacheTremEntrada = StatusTremResultado | { vazio: true };
+
 const TTL_STATUS_MS = 30_000;
 const LIMIAR_SOMA_MINIMA = 15; // equivalente a 1.5 na escala de pesos (×10)
 const MIN_CONFIANCA_DERIVACAO_LINHA = 20;
@@ -209,8 +211,10 @@ export class StatusService {
 
   async getStatusTrem(tremId: string): Promise<StatusTremResultado | null> {
     const cacheKey = `status:trem:${tremId}`;
-    const cached = await this.cache.get<StatusTremResultado | null>(cacheKey);
-    if (cached !== null) return cached;
+    const cached = await this.cache.get<CacheTremEntrada>(cacheKey);
+    if (cached !== null) {
+      return 'vazio' in cached ? null : cached;
+    }
 
     const agora = new Date();
     const reportes = await this.reporteRepo.find({
@@ -239,6 +243,7 @@ export class StatusService {
     );
 
     if (!valido) {
+      await this.cache.set(cacheKey, { vazio: true }, TTL_STATUS_MS);
       return null;
     }
 
@@ -265,19 +270,20 @@ export class StatusService {
     ]);
 
     const estacoesComStatus = await Promise.all(
-      estacoes.map(async (estacao) => ({
-        ...estacao,
-        status_efetivo: await this.getStatusEstacao(estacao.id),
-      })),
+      estacoes.map(async (estacao) =>
+        Object.assign({}, estacao, {
+          status_efetivo: await this.getStatusEstacao(estacao.id),
+        }),
+      ),
     );
 
     const linhasComStatus = await Promise.all(
-      linhas.map(async (linha) => ({
-        ...linha,
-        status_efetivo: await this.getStatusLinha(linha.id),
-      })),
+      linhas.map(async (linha) =>
+        Object.assign({}, linha, {
+          status_efetivo: await this.getStatusLinha(linha.id),
+        }),
+      ),
     );
-
     // Regra 7.2.1 — Trem sem reportes há > 20 minutos é considerado inativo no mapa
     const limiteInatividade = new Date(Date.now() - JANELA_TREM_ATIVO_MS);
     const trensAtivos = (
@@ -290,10 +296,9 @@ export class StatusService {
           ) {
             return null;
           }
-          return {
-            ...trem,
+          return Object.assign({}, trem, {
             status_efetivo: statusTrem,
-          };
+          });
         }),
       )
     ).filter((t) => t !== null);

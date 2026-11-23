@@ -16,7 +16,6 @@ import { Usuario } from '../usuarios/entities/usuario.entity.js';
 import { ReputacaoService } from '../reputacao/reputacao.service.js';
 import { StatusService } from './status.service.js';
 import { Coordenada, haversineMetros } from '../common/geo/haversine.js';
-import { METROREC_DATA } from '../database/seeds/metrorec.data.js';
 import {
   decidirReporte,
   DecisaoReporte,
@@ -39,12 +38,11 @@ export class ConfirmacoesService {
     private readonly reporteRepo: Repository<Reporte>,
     @InjectRepository(ConfirmacaoReporte)
     private readonly confirmacaoRepo: Repository<ConfirmacaoReporte>,
+    @InjectRepository(Estacao)
+    private readonly estacaoRepo: Repository<Estacao>,
     private readonly reputacaoService: ReputacaoService,
     @Optional()
     private readonly statusService?: StatusService,
-    @Optional()
-    @InjectRepository(Estacao)
-    private readonly estacaoRepo?: Repository<Estacao>,
   ) { }
 
   async confirmar(
@@ -211,27 +209,16 @@ export class ConfirmacoesService {
       return null;
     }
 
-    if (this.estacaoRepo) {
-      const estacao = await this.estacaoRepo.findOne({
-        where: { id: reporte.estacao_id },
-      });
-      if (estacao) {
-        return {
-          lat: Number(estacao.latitude),
-          lng: Number(estacao.longitude),
-        };
-      }
+    const estacao = await this.estacaoRepo.findOne({
+      where: { id: reporte.estacao_id },
+    });
+    if (!estacao) {
+      return null;
     }
 
-    const todasEstacoesSeed = METROREC_DATA.flatMap((linha) => linha.estacoes);
-    const seedEstacao = todasEstacoesSeed[reporte.estacao_id - 1];
-    if (seedEstacao) {
-      return {
-        lat: seedEstacao.latitude,
-        lng: seedEstacao.longitude,
-      };
-    }
-
-    return null;
+    return {
+      lat: Number(estacao.latitude),
+      lng: Number(estacao.longitude),
+    };
   }
 }
