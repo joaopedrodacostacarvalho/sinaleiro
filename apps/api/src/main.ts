@@ -35,7 +35,7 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle("Sinaleiro API")
-    .setDescription("API do Sinaleiro — Metrorec Colaborativo. \
+    .setDescription("API do Sinaleiro, um app para um Metrorec Colaborativo. \
       Reporte e consulte em tempo real o status das linhas, estações \
       e trens do Metrô do Recife.")
     .setVersion("1.0.0")
