@@ -1,8 +1,19 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+
 import { LinhasService } from './linhas.service.js';
 import { CreateLinhaDto } from './dto/create-linha.dto.js';
 import { UpdateLinhaDto } from './dto/update-linha.dto.js';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { FirebaseAuthGuard } from '../auth/firebase-auth/firebase-auth.guard.js';
 
 @ApiTags('linhas')
@@ -13,31 +24,39 @@ export class LinhasController {
   @Post()
   @UseGuards(FirebaseAuthGuard)
   @ApiBearerAuth('firebase-auth')
+  @ApiOperation({ summary: 'Criar uma nova linha' })
   create(@Body() createLinhaDto: CreateLinhaDto) {
     return this.linhasService.create(createLinhaDto);
   }
 
   @Get()
+  @ApiOperation({ summary: 'Listar todas as linhas do Metrorec' })
   findAll() {
     return this.linhasService.findAll();
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.linhasService.findOne(+id);
+  @ApiOperation({ summary: 'Buscar linha por ID' })
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.linhasService.findOne(id);
   }
 
   @Patch(':id')
   @UseGuards(FirebaseAuthGuard)
   @ApiBearerAuth('firebase-auth')
-  update(@Param('id') id: string, @Body() updateLinhaDto: UpdateLinhaDto) {
-    return this.linhasService.update(+id, updateLinhaDto);
+  @ApiOperation({ summary: 'Atualizar uma linha' })
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateLinhaDto: UpdateLinhaDto,
+  ) {
+    return this.linhasService.update(id, updateLinhaDto);
   }
 
   @Delete(':id')
   @UseGuards(FirebaseAuthGuard)
   @ApiBearerAuth('firebase-auth')
-  remove(@Param('id') id: string) {
-    return this.linhasService.remove(+id);
+  @ApiOperation({ summary: 'Remover uma linha' })
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.linhasService.remove(id);
   }
 }
