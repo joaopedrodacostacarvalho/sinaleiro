@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calcularExpiracao, assertAlvoCoerente, calcularConfiancaInicial, isDuplicata,
 } from './reportes.regras.js';
-import { StatusEstacao, StatusLinha, StatusTrem, TipoReporte } from '@sinaleiro/types/enums';
+import { Sentido, StatusEstacao, StatusLinha, StatusTrem, TipoReporte } from '@sinaleiro/types/enums';
 import { makeReporte, makeUsuario } from '../../test/fixtures.js';
 
 describe('calcularExpiracao() — Regras 3.3.2', () => {
@@ -24,7 +24,7 @@ describe('calcularExpiracao() — Regras 3.3.2', () => {
   });
 });
 
-describe('assertAlvoCoerente() — Regras 3.1', () => {
+describe('assertAlvoCoerente() — Regras 3.1 / 7.1', () => {
   it('ESTACAO exige estacao_id e status_estacao', () => {
     expect(() => assertAlvoCoerente({
       tipo: TipoReporte.ESTACAO, estacao_id: 1, status_estacao: StatusEstacao.LOTADA,
@@ -53,12 +53,28 @@ describe('assertAlvoCoerente() — Regras 3.1', () => {
     })).toThrow();
   });
 
-  it('TREM exige trem_id, estacao_id e status_trem', () => {
+  it('TREM exige linha_id, sentido, estacao_id e status_trem (e aceita id_vagao opcional)', () => {
     expect(() => assertAlvoCoerente({
-      tipo: TipoReporte.TREM, trem_id: 't-1', estacao_id: 1, status_trem: StatusTrem.LOTADO,
+      tipo: TipoReporte.TREM,
+      linha_id: 1,
+      sentido: Sentido.RECIFE,
+      estacao_id: 1,
+      status_trem: StatusTrem.LOTADO,
     })).not.toThrow();
+
     expect(() => assertAlvoCoerente({
-      tipo: TipoReporte.TREM, estacao_id: 1, status_trem: StatusTrem.LOTADO,
+      tipo: TipoReporte.TREM,
+      linha_id: 1,
+      sentido: Sentido.RECIFE,
+      estacao_id: 1,
+      id_vagao: 'TUE 101',
+      status_trem: StatusTrem.LOTADO,
+    })).not.toThrow();
+
+    expect(() => assertAlvoCoerente({
+      tipo: TipoReporte.TREM,
+      estacao_id: 1,
+      status_trem: StatusTrem.LOTADO,
     })).toThrow();
   });
 });

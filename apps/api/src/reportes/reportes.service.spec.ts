@@ -1,8 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ConflictException, ForbiddenException, TooManyRequestsException, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  HttpStatus,
+} from '@nestjs/common';
 import { ReportesService } from './reportes.service.js';
 import {
-  StatusEstacao, StatusTrem, TipoReporte,
+  Sentido,
+  StatusEstacao,
+  StatusTrem,
+  TipoReporte,
 } from '@sinaleiro/types/enums';
 import { makeEstacao, makeReporte, makeUsuario } from '../../test/fixtures.js';
 
@@ -11,6 +19,7 @@ describe('ReportesService.create()', () => {
   let reporteRepo: any;
   let estacaoRepo: any;
   let reputacaoService: any;
+  let trensService: any;
 
   beforeEach(() => {
     reporteRepo = {
@@ -21,7 +30,22 @@ describe('ReportesService.create()', () => {
     };
     estacaoRepo = { findOne: vi.fn() };
     reputacaoService = { getPeso: vi.fn().mockReturnValue(1.0) };
-    service = new ReportesService(reporteRepo, estacaoRepo, reputacaoService);
+    trensService = {
+      resolverTrem: vi.fn().mockResolvedValue({
+        id: 't-resolvido',
+        linha_id: 1,
+        sentido: Sentido.RECIFE,
+        id_vagao: null,
+      }),
+    };
+    service = new ReportesService(
+      reporteRepo,
+      estacaoRepo,
+      reputacaoService,
+      undefined,
+      undefined,
+      trensService,
+    );
   });
 
   // ---- Regra 3.1 ----
@@ -55,7 +79,9 @@ describe('ReportesService.create()', () => {
       await expect(service.create(
         { tipo: TipoReporte.ESTACAO, estacao_id: 1, status_estacao: StatusEstacao.NORMAL } as any,
         makeUsuario(),
-      )).rejects.toThrow(TooManyRequestsException);
+      )).rejects.toMatchObject({
+        status: HttpStatus.TOO_MANY_REQUESTS,
+      });
     });
 
     it('permite 10 reportes/hora', async () => {
@@ -71,12 +97,12 @@ describe('ReportesService.create()', () => {
   describe('confiança inicial', () => {
     it('usa o peso do autor', async () => {
       reputacaoService.getPeso.mockReturnValue(2.0);
-      const r = await service.create(
+      await service.create(
         { tipo: TipoReporte.ESTACAO, estacao_id: 1, status_estacao: StatusEstacao.NORMAL } as any,
         makeUsuario({ reputacao: 60 }),
       );
       expect(reporteRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ confianca: 20 }),  // 2.0 × 10
+        expect.objectContaining({ confianca: 20 }), // 2.0 × 10
       );
     });
 
@@ -94,15 +120,35 @@ describe('ReportesService.create()', () => {
     });
   });
 
-  // ---- Regra 3.3.2 ----
-  describe('expiração', () => {
-    it('TREM expira em 5 min', async () => {
+  // ---- Regra 3.3.2 & Regra 7.1 ----
+  describe('expiração e matching de trem (Regra 7.1)', () => {
+    it('TREM resolve trem via TrensService, salva linha_id=null e expira em 5 min', async () => {
       const antes = Date.now();
+      const autor = makeUsuario({ reputacao: 20 });
+
       await service.create(
-        { tipo: TipoReporte.TREM, trem_id: 't-1', estacao_id: 1, status_trem: StatusTrem.NORMAL } as any,
-        makeUsuario(),
+        {
+          tipo: TipoReporte.TREM,
+          linha_id: 1,
+          sentido: Sentido.RECIFE,
+          estacao_id: 1,
+          id_vagao: 'TUE 101',
+          status_trem: StatusTrem.NORMAL,
+        },
+        autor,
       );
+
+      expect(trensService.resolverTrem).toHaveBeenCalledWith(
+        1,
+        Sentido.RECIFE,
+        'TUE 101',
+        autor,
+      );
+
       const chamada = reporteRepo.save.mock.calls[0][0];
+      expect(chamada.trem_id).toBe('t-resolvido');
+      expect(chamada.linha_id).toBeNull();
+
       const delta = chamada.data_hora_expiracao.getTime() - antes;
       expect(delta).toBeGreaterThanOrEqual(5 * 60_000 - 1000);
       expect(delta).toBeLessThanOrEqual(5 * 60_000 + 1000);
@@ -112,13 +158,24 @@ describe('ReportesService.create()', () => {
   // ---- Regra 3.2.3 ----
   describe('cooldown pós-refutação', () => {
     it('força peso 0.5 se último reporte foi REFUTADO em <15min', async () => {
+      reputacaoService.getPeso.mockReturnValue(3.0);
       reporteRepo.findOne
         .mockResolvedValueOnce(null) // duplicata
-        .mockResolvedValueOnce(makeReporte({ ativo: false, data_hora_criacao: new Date(Date.now() - 5 * 60_000) }));
-      // Implementação precisa expor essa verificação — mock do service interno
-      // Nota: a assinatura do ReportesService deve aceitar o autor e checar
-      // o último reporte do usuário quando necessário.
-      // TODO: implementar — a regra é descrita por este teste.
+        .mockResolvedValueOnce(
+          makeReporte({
+            ativo: false,
+            data_hora_criacao: new Date(Date.now() - 5 * 60_000),
+          }),
+        );
+
+      await service.create(
+        { tipo: TipoReporte.ESTACAO, estacao_id: 1, status_estacao: StatusEstacao.NORMAL } as any,
+        makeUsuario({ reputacao: 100 }),
+      );
+
+      expect(reporteRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ confianca: 5 }), // 0.5 × 10
+      );
     });
   });
 
@@ -141,18 +198,17 @@ describe('ReportesService.create()', () => {
       expect(reporteRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'r-existente' }),
       );
-      // A expiração foi estendida
       const salvo = reporteRepo.save.mock.calls[0][0];
-      expect(salvo.data_hora_expiracao.getTime()).toBeGreaterThan(existente.data_hora_expiracao.getTime());
+      expect(salvo.data_hora_expiracao.getTime()).toBeGreaterThan(
+        existente.data_hora_expiracao.getTime(),
+      );
     });
   });
 
   // ---- Decisão do usuário: FECHADA bloqueia TREM ----
   describe('estação FECHADA bloqueia reporte de TREM', () => {
     it('403 se a estação de avistamento está FECHADA', async () => {
-      // Service deve consultar o status efetivo da estação antes de aceitar reporte de trem
       estacaoRepo.findOne.mockResolvedValue(makeEstacao({ id: 1 }));
-      // mock do StatusService.getStatusEstacao → FECHADA
       (service as any).statusService = {
         getStatusEstacao: vi.fn().mockResolvedValue({
           status: StatusEstacao.FECHADA, confianca: 80,
@@ -160,9 +216,16 @@ describe('ReportesService.create()', () => {
       };
 
       await expect(service.create(
-        { tipo: TipoReporte.TREM, trem_id: 't-1', estacao_id: 1, status_trem: StatusTrem.NORMAL } as any,
+        {
+          tipo: TipoReporte.TREM,
+          linha_id: 1,
+          sentido: Sentido.RECIFE,
+          estacao_id: 1,
+          status_trem: StatusTrem.NORMAL,
+        },
         makeUsuario(),
       )).rejects.toThrow(ForbiddenException);
+      expect(trensService.resolverTrem).not.toHaveBeenCalled();
     });
 
     it('permite reporte de TREM se estação está aberta', async () => {
@@ -174,7 +237,13 @@ describe('ReportesService.create()', () => {
       };
 
       await expect(service.create(
-        { tipo: TipoReporte.TREM, trem_id: 't-1', estacao_id: 1, status_trem: StatusTrem.NORMAL } as any,
+        {
+          tipo: TipoReporte.TREM,
+          linha_id: 1,
+          sentido: Sentido.RECIFE,
+          estacao_id: 1,
+          status_trem: StatusTrem.NORMAL,
+        },
         makeUsuario(),
       )).resolves.toBeDefined();
     });

@@ -1,6 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
 import {
-  StatusEstacao, StatusLinha, StatusTrem, TipoReporte,
+  Sentido,
+  StatusEstacao,
+  StatusLinha,
+  StatusTrem,
+  TipoReporte,
 } from '@sinaleiro/types/enums';
 import { getPeso } from '../reputacao/reputacao.regras.js';
 
@@ -41,9 +45,10 @@ export function calcularConfiancaInicial(
 
 export interface AlvoReporte {
   tipo: TipoReporte;
-  trem_id?: string;
   estacao_id?: number;
   linha_id?: number;
+  sentido?: Sentido;
+  id_vagao?: string;
   status_estacao?: StatusEstacao;
   status_linha?: StatusLinha;
   status_trem?: StatusTrem;
@@ -53,7 +58,8 @@ export function assertAlvoCoerente(dto: AlvoReporte): void {
   const p = {
     estacao_id: dto.estacao_id != null,
     linha_id: dto.linha_id != null,
-    trem_id: dto.trem_id != null,
+    sentido: dto.sentido != null,
+    id_vagao: dto.id_vagao != null,
     status_estacao: dto.status_estacao != null,
     status_linha: dto.status_linha != null,
     status_trem: dto.status_trem != null,
@@ -63,7 +69,7 @@ export function assertAlvoCoerente(dto: AlvoReporte): void {
     if (!p.estacao_id || !p.status_estacao) {
       throw new BadRequestException('Reporte de estação exige estacao_id e status_estacao');
     }
-    if (p.linha_id || p.trem_id || p.status_linha || p.status_trem) {
+    if (p.linha_id || p.sentido || p.id_vagao || p.status_linha || p.status_trem) {
       throw new BadRequestException('Reporte de estação não aceita campos de linha/trem');
     }
   }
@@ -72,20 +78,20 @@ export function assertAlvoCoerente(dto: AlvoReporte): void {
     if (!p.linha_id || !p.status_linha) {
       throw new BadRequestException('Reporte de linha exige linha_id e status_linha');
     }
-    if (p.estacao_id || p.trem_id || p.status_estacao || p.status_trem) {
+    if (p.estacao_id || p.sentido || p.id_vagao || p.status_estacao || p.status_trem) {
       throw new BadRequestException('Reporte de linha não aceita campos de estação/trem');
     }
   }
 
   if (dto.tipo === TipoReporte.TREM) {
-    if (!p.trem_id || !p.estacao_id || !p.status_trem) {
+    if (!p.linha_id || !p.sentido || !p.estacao_id || !p.status_trem) {
       throw new BadRequestException(
-        'Reporte de trem exige trem_id, estacao_id (local do avistamento) e status_trem',
+        'Reporte de trem exige linha_id, sentido, estacao_id (local do avistamento) e status_trem',
       );
     }
-    if (p.linha_id || p.status_estacao || p.status_linha) {
+    if (p.status_estacao || p.status_linha) {
       throw new BadRequestException(
-        'Reporte de trem não aceita linha_id/status_estacao/status_linha',
+        'Reporte de trem não aceita status_estacao/status_linha',
       );
     }
   }
