@@ -1,4 +1,4 @@
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, type Relation } from 'typeorm';
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, type Relation } from 'typeorm';
 import { StatusEstacao, StatusLinha, StatusTrem, TipoReporte } from '@sinaleiro/types/enums';
 import { Usuario } from '../../usuarios/entities/usuario.entity.js';
 import { Trem } from '../../trens/entities/trem.entity.js';
@@ -6,7 +6,23 @@ import { ConfirmacaoReporte } from './confirmacao-reporte.entity/confirmacao-rep
 import { Estacao } from '../../estacoes/entities/estacao.entity.js';
 import { Linha } from '../../linhas/entities/linha.entity.js';
 
+@Index('idx_reporte_expiracao', ['data_hora_expiracao'], { where: '"ativo" = TRUE' })
 @Entity('reporte')
+@Check(`"reporte_alvo_unico"`, `
+  (tipo = 'ESTACAO'
+    AND estacao_id IS NOT NULL AND status_estacao IS NOT NULL
+    AND linha_id IS NULL AND trem_id IS NULL
+    AND status_linha IS NULL AND status_trem IS NULL)
+  OR
+  (tipo = 'LINHA'
+    AND linha_id IS NOT NULL AND status_linha IS NOT NULL
+    AND estacao_id IS NULL AND trem_id IS NULL
+    AND status_estacao IS NULL AND status_trem IS NULL)
+  OR
+  (tipo = 'TREM'
+    AND trem_id IS NOT NULL AND estacao_id IS NOT NULL AND status_trem IS NOT NULL
+    AND linha_id IS NULL AND status_estacao IS NULL AND status_linha IS NULL)
+`)
 export class Reporte {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -38,8 +54,8 @@ export class Reporte {
   @Column({ type: 'timestamp' })
   data_hora_criacao: Date;
 
-  @Column({ type: 'timestamp', nullable: true })
-  data_hora_expiracao: Date | null;
+  @Column({ type: 'timestamp' })
+  data_hora_expiracao: Date;
 
   @Column({ type: 'integer', default: 0 })
   confianca: number;
