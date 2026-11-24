@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import {
   Sentido,
   StatusEstacao,
+  StatusLinha,
   StatusTrem,
   TipoConfirmacao,
   TipoReporte,
@@ -89,6 +90,7 @@ describe('Sinaleiro API (E2E)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
   let estacaoRecife: EstacaoResponse;
+  let estacaoJoanaBezerra: EstacaoResponse;
 
   beforeAll(async () => {
     const setup = await criarAppE2E();
@@ -103,6 +105,11 @@ describe('Sinaleiro API (E2E)', () => {
     estacaoRecife =
       estacoes.find((e) => e.nome.toLowerCase().includes('recife')) ??
       estacoes[0];
+    estacaoJoanaBezerra =
+      estacoes.find(
+        (e) =>
+          e.linha_id === estacaoRecife.linha_id && e.id !== estacaoRecife.id,
+      ) ?? estacoes[1];
   });
 
   beforeEach(async () => {
@@ -638,6 +645,159 @@ describe('Sinaleiro API (E2E)', () => {
         .expect(201);
 
       expect((resPosCooldown.body as { confianca: number }).confianca).toBe(5);
+    });
+  });
+
+  describe('Derivação de status da Linha por Estações (Regras 5.2 e 5.2.1)', () => {
+    it('ignora estação com confiança < 20 (Regra 5.2.1) e deriva ATENCAO com 1 estação PARALISADA e PARALISADA com 2 estações PARALISADAS (Regra 5.2)', async () => {
+      const linhaId = estacaoRecife.linha_id;
+      const tokenAutor1 = criarTokenTeste('e2e-linha-autor-01');
+      const tokenValidador1 = criarTokenTeste('e2e-linha-val-01');
+      const tokenValidador2 = criarTokenTeste('e2e-linha-val-02');
+      const tokenAutor2 = criarTokenTeste('e2e-linha-autor-02');
+      const tokenValidador3 = criarTokenTeste('e2e-linha-val-03');
+      const tokenValidador4 = criarTokenTeste('e2e-linha-val-04');
+
+      // 1. Reporte inicial PARALISADA na Estação Recife sem quórum (confiança = 10 < 20)
+      const resRepRecife = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenAutor1}`)
+        .send({
+          tipo: TipoReporte.ESTACAO,
+          estacao_id: estacaoRecife.id,
+          status_estacao: StatusEstacao.PARALISADA,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      const reporteRecife = resRepRecife.body as { id: string };
+
+      // Regra 5.2.1 — Confiança 10 (< 20) não contamina o status da linha
+      const resLinhaInicial = await request(app.getHttpServer())
+        .get(`/linhas/${linhaId}/status`)
+        .expect(200);
+
+      expect(resLinhaInicial.body).toMatchObject({
+        status: StatusLinha.NORMAL,
+        confianca: 0,
+      });
+
+      // 2. Duas confirmações elevam a Estação Recife para confiança = 20 (>= 20)
+      for (const token of [tokenValidador1, tokenValidador2]) {
+        await request(app.getHttpServer())
+          .post(`/reportes/${reporteRecife.id}/confirmacoes`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({
+            tipo: TipoConfirmacao.CONFIRMAR,
+            latitude: Number(estacaoRecife.latitude),
+            longitude: Number(estacaoRecife.longitude),
+          })
+          .expect(201);
+      }
+
+      // Regra 5.2 — 1 estação PARALISADA com confiança >= 20 deriva status ATENCAO na linha
+      const resLinhaAtencao = await request(app.getHttpServer())
+        .get(`/linhas/${linhaId}/status`)
+        .expect(200);
+
+      expect(resLinhaAtencao.body).toMatchObject({
+        status: StatusLinha.ATENCAO,
+        confianca: 20,
+      });
+
+      // 3. Segunda estação da mesma linha (Joana Bezerra) reportada como PARALISADA e confirmada
+      const resRepJoana = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenAutor2}`)
+        .send({
+          tipo: TipoReporte.ESTACAO,
+          estacao_id: estacaoJoanaBezerra.id,
+          status_estacao: StatusEstacao.PARALISADA,
+          latitude: Number(estacaoJoanaBezerra.latitude),
+          longitude: Number(estacaoJoanaBezerra.longitude),
+        })
+        .expect(201);
+
+      const reporteJoana = resRepJoana.body as { id: string };
+
+      for (const token of [tokenValidador3, tokenValidador4]) {
+        await request(app.getHttpServer())
+          .post(`/reportes/${reporteJoana.id}/confirmacoes`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({
+            tipo: TipoConfirmacao.CONFIRMAR,
+            latitude: Number(estacaoJoanaBezerra.latitude),
+            longitude: Number(estacaoJoanaBezerra.longitude),
+          })
+          .expect(201);
+      }
+
+      // Regra 5.2 — 2 estações PARALISADAS com confiança >= 20 derivam status PARALISADA na linha
+      const resLinhaParalisada = await request(app.getHttpServer())
+        .get(`/linhas/${linhaId}/status`)
+        .expect(200);
+
+      expect(resLinhaParalisada.body).toMatchObject({
+        status: StatusLinha.PARALISADA,
+        confianca: 20,
+      });
+    });
+
+    it('deriva ATENCAO na linha quando 2 estações distintas atingem ATENCAO com confiança >= 20', async () => {
+      const linhaId = estacaoRecife.linha_id;
+      const estacoes = [estacaoRecife, estacaoJoanaBezerra];
+
+      for (let i = 0; i < estacoes.length; i++) {
+        const estacao = estacoes[i];
+        const tokenAutor = criarTokenTeste(`e2e-atencao-autor-${i}`);
+        const tokenVal1 = criarTokenTeste(`e2e-atencao-val1-${i}`);
+        const tokenVal2 = criarTokenTeste(`e2e-atencao-val2-${i}`);
+
+        const resRep = await request(app.getHttpServer())
+          .post('/reportes')
+          .set('Authorization', `Bearer ${tokenAutor}`)
+          .send({
+            tipo: TipoReporte.ESTACAO,
+            estacao_id: estacao.id,
+            status_estacao: StatusEstacao.ATENCAO,
+            latitude: Number(estacao.latitude),
+            longitude: Number(estacao.longitude),
+          })
+          .expect(201);
+
+        const rep = resRep.body as { id: string };
+
+        for (const token of [tokenVal1, tokenVal2]) {
+          await request(app.getHttpServer())
+            .post(`/reportes/${rep.id}/confirmacoes`)
+            .set('Authorization', `Bearer ${token}`)
+            .send({
+              tipo: TipoConfirmacao.CONFIRMAR,
+              latitude: Number(estacao.latitude),
+              longitude: Number(estacao.longitude),
+            })
+            .expect(201);
+        }
+
+        const resLinha = await request(app.getHttpServer())
+          .get(`/linhas/${linhaId}/status`)
+          .expect(200);
+
+        if (i === 0) {
+          // Apenas 1 estação em ATENCAO ainda mantém a linha como NORMAL
+          expect(resLinha.body).toMatchObject({
+            status: StatusLinha.NORMAL,
+            confianca: 0,
+          });
+        } else {
+          // 2 estações em ATENCAO derivam ATENCAO na linha
+          expect(resLinha.body).toMatchObject({
+            status: StatusLinha.ATENCAO,
+            confianca: 20,
+          });
+        }
+      }
     });
   });
 });
