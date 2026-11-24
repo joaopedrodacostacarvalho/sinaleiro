@@ -8,6 +8,8 @@ import {
   TipoReporte,
 } from '@sinaleiro/types/enums';
 import { Usuario } from '../src/usuarios/entities/usuario.entity.js';
+import { Reporte } from '../src/reportes/entities/reporte.entity.js';
+import { CacheService } from '../src/common/cache/cache.service.js';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -798,6 +800,248 @@ describe('Sinaleiro API (E2E)', () => {
           });
         }
       }
+    });
+  });
+
+  describe('Expiração temporal de reportes e recomputação de status', () => {
+    it('configura TTL de ~30 min para ESTACAO e LINHA e restaura status NORMAL após expirar', async () => {
+      const linhaId = estacaoRecife.linha_id;
+      const tokenAutor = criarTokenTeste('e2e-exp-estacao-autor');
+      const tokenVal1 = criarTokenTeste('e2e-exp-estacao-val1');
+      const tokenVal2 = criarTokenTeste('e2e-exp-estacao-val2');
+      const tokenLinhaAutor = criarTokenTeste('e2e-exp-linha-autor');
+      const tokenLinhaVal1 = criarTokenTeste('e2e-exp-linha-val1');
+      const tokenLinhaVal2 = criarTokenTeste('e2e-exp-linha-val2');
+
+      // 1. Cria e confirma reporte de ESTACAO (TTL esperado ~30 min)
+      const resEstacao = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenAutor}`)
+        .send({
+          tipo: TipoReporte.ESTACAO,
+          estacao_id: estacaoRecife.id,
+          status_estacao: StatusEstacao.LOTADA,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      const repEstacao = resEstacao.body as {
+        id: string;
+        data_hora_criacao: string;
+        data_hora_expiracao: string;
+      };
+
+      const ttlEstacaoMs =
+        new Date(repEstacao.data_hora_expiracao).getTime() -
+        new Date(repEstacao.data_hora_criacao).getTime();
+      expect(ttlEstacaoMs).toBeGreaterThanOrEqual(29 * 60_000);
+      expect(ttlEstacaoMs).toBeLessThanOrEqual(31 * 60_000);
+
+      for (const token of [tokenVal1, tokenVal2]) {
+        await request(app.getHttpServer())
+          .post(`/reportes/${repEstacao.id}/confirmacoes`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({
+            tipo: TipoConfirmacao.CONFIRMAR,
+            latitude: Number(estacaoRecife.latitude),
+            longitude: Number(estacaoRecife.longitude),
+          })
+          .expect(201);
+      }
+
+      // 2. Cria e confirma reporte explícito de LINHA (TTL esperado ~30 min)
+      const resLinha = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenLinhaAutor}`)
+        .send({
+          tipo: TipoReporte.LINHA,
+          linha_id: linhaId,
+          status_linha: StatusLinha.PARALISADA,
+        })
+        .expect(201);
+
+      const repLinha = resLinha.body as {
+        id: string;
+        data_hora_criacao: string;
+        data_hora_expiracao: string;
+      };
+
+      const ttlLinhaMs =
+        new Date(repLinha.data_hora_expiracao).getTime() -
+        new Date(repLinha.data_hora_criacao).getTime();
+      expect(ttlLinhaMs).toBeGreaterThanOrEqual(29 * 60_000);
+      expect(ttlLinhaMs).toBeLessThanOrEqual(31 * 60_000);
+
+      for (const token of [tokenLinhaVal1, tokenLinhaVal2]) {
+        await request(app.getHttpServer())
+          .post(`/reportes/${repLinha.id}/confirmacoes`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({
+            tipo: TipoConfirmacao.CONFIRMAR,
+          })
+          .expect(201);
+      }
+
+      // Confirma que ambos os status ativos refletem os reportes antes da expiração
+      const resStatusEstacaoAtivo = await request(app.getHttpServer())
+        .get(`/estacoes/${estacaoRecife.id}/status`)
+        .expect(200);
+      expect(resStatusEstacaoAtivo.body).toMatchObject({
+        status: StatusEstacao.LOTADA,
+        confianca: 20,
+      });
+
+      const resStatusLinhaAtivo = await request(app.getHttpServer())
+        .get(`/linhas/${linhaId}/status`)
+        .expect(200);
+      expect(resStatusLinhaAtivo.body).toMatchObject({
+        status: StatusLinha.PARALISADA,
+        confianca: 20,
+      });
+
+      // 3. Simula expiração no banco e limpa cache para recomputar status
+      const passado = new Date(Date.now() - 5_000);
+      await dataSource
+        .getRepository(Reporte)
+        .update([repEstacao.id, repLinha.id], { data_hora_expiracao: passado });
+      await limparDadosTransacionais(dataSource, app);
+
+      // Recria os reportes já vencidos para validar filtragem por data_hora_expiracao
+      await request(app.getHttpServer())
+        .post('/auth/sync')
+        .set('Authorization', `Bearer ${tokenAutor}`)
+        .expect(200);
+      const autorDb = await dataSource
+        .getRepository(Usuario)
+        .findOneByOrFail({ firebase_uid: 'e2e-exp-estacao-autor' });
+
+      await request(app.getHttpServer())
+        .post('/auth/sync')
+        .set('Authorization', `Bearer ${tokenLinhaAutor}`)
+        .expect(200);
+      const linhaAutorDb = await dataSource
+        .getRepository(Usuario)
+        .findOneByOrFail({ firebase_uid: 'e2e-exp-linha-autor' });
+
+      const reporteRepo = dataSource.getRepository(Reporte);
+      await reporteRepo.save([
+        reporteRepo.create({
+          tipo: TipoReporte.ESTACAO,
+          usuario_id: autorDb.id,
+          estacao_id: estacaoRecife.id,
+          linha_id: null,
+          trem_id: null,
+          status_estacao: StatusEstacao.LOTADA,
+          status_linha: null,
+          status_trem: null,
+          data_hora_criacao: new Date(Date.now() - 31 * 60_000),
+          data_hora_expiracao: passado,
+          confianca: 20,
+          ativo: true,
+          reputacao_aplicada: true,
+        }),
+        reporteRepo.create({
+          tipo: TipoReporte.LINHA,
+          usuario_id: linhaAutorDb.id,
+          estacao_id: null,
+          linha_id: linhaId,
+          trem_id: null,
+          status_estacao: null,
+          status_linha: StatusLinha.PARALISADA,
+          status_trem: null,
+          data_hora_criacao: new Date(Date.now() - 31 * 60_000),
+          data_hora_expiracao: passado,
+          confianca: 20,
+          ativo: true,
+          reputacao_aplicada: true,
+        }),
+      ]);
+
+      const resEstacaoAposExpirar = await request(app.getHttpServer())
+        .get(`/estacoes/${estacaoRecife.id}/status`)
+        .expect(200);
+      expect(resEstacaoAposExpirar.body).toMatchObject({
+        status: StatusEstacao.NORMAL,
+        confianca: 0,
+      });
+
+      const resLinhaAposExpirar = await request(app.getHttpServer())
+        .get(`/linhas/${linhaId}/status`)
+        .expect(200);
+      expect(resLinhaAposExpirar.body).toMatchObject({
+        status: StatusLinha.NORMAL,
+        confianca: 0,
+      });
+
+      const resListagemAtivos = await request(app.getHttpServer())
+        .get('/reportes')
+        .expect(200);
+      expect((resListagemAtivos.body as unknown[]).length).toBe(0);
+    });
+
+    it('configura TTL de ~5 min para TREM e remove trem expirado de GET /mapa', async () => {
+      const tokenVeterano = criarTokenTeste('e2e-exp-trem-vet');
+      await request(app.getHttpServer())
+        .post('/auth/sync')
+        .set('Authorization', `Bearer ${tokenVeterano}`)
+        .expect(200);
+      await dataSource
+        .getRepository(Usuario)
+        .update({ firebase_uid: 'e2e-exp-trem-vet' }, { reputacao: 10 });
+
+      const resTrem = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenVeterano}`)
+        .send({
+          tipo: TipoReporte.TREM,
+          linha_id: estacaoRecife.linha_id,
+          sentido: Sentido.CAMARAGIBE,
+          estacao_id: estacaoRecife.id,
+          id_vagao: 'TUE-EXP-01',
+          status_trem: StatusTrem.ATRASO,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      const repTrem = resTrem.body as {
+        id: string;
+        trem_id: string;
+        data_hora_criacao: string;
+        data_hora_expiracao: string;
+      };
+
+      const ttlTremMs =
+        new Date(repTrem.data_hora_expiracao).getTime() -
+        new Date(repTrem.data_hora_criacao).getTime();
+      expect(ttlTremMs).toBeGreaterThanOrEqual(4 * 60_000 + 50_000);
+      expect(ttlTremMs).toBeLessThanOrEqual(6 * 60_000);
+
+      // Antes de expirar, trem aparece em GET /mapa
+      const resMapaAntes = await request(app.getHttpServer())
+        .get('/mapa')
+        .expect(200);
+      expect(
+        (resMapaAntes.body as MapaResponse).trens.some(
+          (t) => t.id === repTrem.trem_id,
+        ),
+      ).toBe(true);
+
+      // Marca o reporte como expirado e limpa o cache
+      await dataSource.getRepository(Reporte).update(repTrem.id, {
+        data_hora_expiracao: new Date(Date.now() - 1_000),
+      });
+      await app.get(CacheService).clear();
+
+      const resMapaDepois = await request(app.getHttpServer())
+        .get('/mapa')
+        .expect(200);
+      expect(
+        (resMapaDepois.body as MapaResponse).trens.some(
+          (t) => t.id === repTrem.trem_id,
+        ),
+      ).toBe(false);
     });
   });
 });
