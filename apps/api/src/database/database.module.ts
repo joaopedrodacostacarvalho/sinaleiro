@@ -3,6 +3,11 @@ import { fileURLToPath } from 'node:url';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { Linha } from '../linhas/entities/linha.entity.js';
+import { LinhaSentido } from '../linhas/entities/linha-sentido.entity/linha-sentido.entity.js';
+import { Estacao } from '../estacoes/entities/estacao.entity.js';
+import { SeedService } from './seeds/seed.service.js';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 @Module({
@@ -35,6 +40,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
         };
       },
     }),
+    TypeOrmModule.forFeature([Linha, LinhaSentido, Estacao]),
   ],
+  providers: [SeedService],
+  exports: [SeedService],
 })
 export class DatabaseModule { }
