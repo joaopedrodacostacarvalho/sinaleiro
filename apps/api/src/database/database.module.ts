@@ -9,6 +9,7 @@ import { Estacao } from '../estacoes/entities/estacao.entity.js';
 import { SeedService } from './seeds/seed.service.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const migrationExt = import.meta.url.endsWith('.ts') ? '.ts' : '.js';
 
 @Module({
   imports: [
@@ -34,7 +35,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
           password: process.env.DB_PASSWORD ?? 'postgres',
           database: process.env.DB_NAME ?? 'sinaleiro',
           autoLoadEntities: true,
-          migrations: [join(__dirname, 'migrations', '*.js')],
+          migrations: [join(__dirname, 'migrations', `*${migrationExt}`)],
+          retryAttempts: process.env.NODE_ENV === 'test' ? 1 : 10,
           synchronize,
           migrationsRun,
         };

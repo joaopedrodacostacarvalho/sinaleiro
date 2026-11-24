@@ -37,3 +37,37 @@ jobs:
         env:
           NODE_ENV: test
         run: npm test --workspace=apps/api
+  e2e:
+    name: Testes E2E (PostgreSQL + Migrações)
+    runs-on: ubuntu-latest
+    needs: [build-and-test]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sinaleiro_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: sinaleiro_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build --workspace=@sinaleiro/types
+      - run: npm run test:e2e --workspace=apps/api

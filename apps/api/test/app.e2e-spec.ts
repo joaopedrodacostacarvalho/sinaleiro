@@ -1,29 +1,326 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
+import {
+  StatusEstacao,
+  TipoConfirmacao,
+  TipoReporte,
+} from '@sinaleiro/types/enums';
 import request from 'supertest';
-import { App } from 'supertest/types.js';
-import { AppModule } from './../src/app.module.js';
+import { DataSource } from 'typeorm';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+import {
+  criarAppE2E,
+  criarTokenTeste,
+  limparDadosTransacionais,
+} from './e2e-setup.js';
+
+interface LinhaResponse {
+  id: number;
+  nome: string;
+  cor: string;
+}
+
+interface EstacaoResponse {
+  id: number;
+  nome: string;
+  latitude: number;
+  longitude: number;
+  linha_id: number;
+}
+
+interface EstacaoProximaResponse {
+  estacao: EstacaoResponse;
+  distancia_metros: number;
+  na_estacao: boolean;
+  fora_de_alcance: boolean;
+}
+
+interface MapaResponse {
+  atualizado_em: string;
+  linhas: LinhaResponse[];
+  estacoes: EstacaoResponse[];
+  trens: unknown[];
+}
+
+interface PerfilResponse {
+  usuario: {
+    id: string;
+    firebase_uid: string;
+    nome: string;
+    email: string;
+    reputacao: number;
+  };
+  peso: number;
+}
+
+interface ErroResponse {
+  statusCode: number;
+  error: string;
+  message: string | string[];
+  timestamp: string;
+  path: string;
+  details?: Record<string, unknown>;
+}
+
+describe('Sinaleiro API (E2E)', () => {
+  let app: INestApplication;
+  let dataSource: DataSource;
+  let estacaoRecife: EstacaoResponse;
+
+  beforeAll(async () => {
+    const setup = await criarAppE2E();
+    app = setup.app;
+    dataSource = setup.dataSource;
+
+    const resEstacoes = await request(app.getHttpServer())
+      .get('/estacoes')
+      .expect(200);
+
+    const estacoes = resEstacoes.body as EstacaoResponse[];
+    estacaoRecife =
+      estacoes.find((e) => e.nome.toLowerCase().includes('recife')) ??
+      estacoes[0];
+  });
 
   beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    await app.init();
+    await limparDadosTransacionais(dataSource);
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
+  afterAll(async () => {
+    if (app) {
+      await app.close();
+    }
   });
 
-  afterEach(async () => {
-    await app.close();
+  describe('Catálogo Metrorec e Mapa agregado', () => {
+    it('GET /mapa retorna linhas e estações populadas pelas migrações e seed', async () => {
+      const res = await request(app.getHttpServer()).get('/mapa').expect(200);
+      const body = res.body as MapaResponse;
+
+      expect(body.atualizado_em).toBeDefined();
+      expect(body.linhas.length).toBeGreaterThanOrEqual(2);
+      expect(body.estacoes.length).toBeGreaterThan(0);
+    });
+
+    it('GET /linhas e GET /linhas/:id retornam dados válidos e 404 padronizado', async () => {
+      const resLista = await request(app.getHttpServer())
+        .get('/linhas')
+        .expect(200);
+      const linhas = resLista.body as LinhaResponse[];
+      expect(linhas.length).toBeGreaterThanOrEqual(2);
+
+      const resDetalhe = await request(app.getHttpServer())
+        .get(`/linhas/${linhas[0].id}`)
+        .expect(200);
+      expect((resDetalhe.body as LinhaResponse).nome).toBe(linhas[0].nome);
+
+      const resInexistente = await request(app.getHttpServer())
+        .get('/linhas/999999')
+        .expect(404);
+      const erro = resInexistente.body as ErroResponse;
+      expect(erro.statusCode).toBe(404);
+      expect(erro.path).toBe('/linhas/999999');
+    });
+
+    it('GET /estacoes/proximas encontra estações próximas às coordenadas da Estação Recife', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/estacoes/proximas')
+        .query({
+          lat: estacaoRecife.latitude,
+          lng: estacaoRecife.longitude,
+        })
+        .expect(200);
+
+      const proximas = res.body as EstacaoProximaResponse[];
+      expect(proximas.length).toBeGreaterThan(0);
+      expect(proximas[0].estacao.id).toBe(estacaoRecife.id);
+      expect(proximas[0].na_estacao).toBe(true);
+      expect(proximas[0].fora_de_alcance).toBe(false);
+    });
+  });
+
+  describe('Autenticação (/auth/*) e HttpExceptionFilter', () => {
+    it('bloqueia acesso sem Bearer token com 401 padronizado', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/auth/me')
+        .expect(401);
+
+      const erro = res.body as ErroResponse;
+      expect(erro.statusCode).toBe(401);
+      expect(erro.path).toBe('/auth/me');
+      expect(erro.timestamp).toBeDefined();
+    });
+
+    it('POST /auth/sync e GET /auth/me provisionam e retornam o perfil do passageiro', async () => {
+      const token = criarTokenTeste(
+        'e2e-carla-01',
+        'carla@metrorec.test',
+        'Carla Silva',
+      );
+
+      const resSync = await request(app.getHttpServer())
+        .post('/auth/sync')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      const perfilSync = resSync.body as PerfilResponse;
+      expect(perfilSync.usuario.firebase_uid).toBe('e2e-carla-01');
+      expect(perfilSync.usuario.nome).toBe('Carla Silva');
+      expect(perfilSync.peso).toBe(1);
+
+      const resMe = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect((resMe.body as PerfilResponse).usuario.id).toBe(
+        perfilSync.usuario.id,
+      );
+    });
+
+    it('POST /auth/custom-token emite token fora de produção e valida DTO', async () => {
+      const resOk = await request(app.getHttpServer())
+        .post('/auth/custom-token')
+        .send({ uid: 'e2e-local-uid' })
+        .expect(200);
+
+      expect((resOk.body as { custom_token: string }).custom_token).toBe(
+        'custom-e2e-local-uid',
+      );
+
+      const resInvalido = await request(app.getHttpServer())
+        .post('/auth/custom-token')
+        .send({ uid: '', campoExtra: true })
+        .expect(400);
+
+      const erro = resInvalido.body as ErroResponse;
+      expect(erro.statusCode).toBe(400);
+      expect(Array.isArray(erro.message)).toBe(true);
+    });
+  });
+
+  describe('Fluxo colaborativo de Reportes e Confirmações', () => {
+    it('aplica confiança 0 fora do raio na criação, bloqueia duplicata (409), valida raio de 2 km e atinge quórum de confirmação', async () => {
+      const tokenAutor = criarTokenTeste('e2e-autor-01');
+      const tokenAutorDistante = criarTokenTeste('e2e-autor-distante-02');
+
+      // Regra 3.2.5 — Criação fora do raio (> 2 km) é aceita com confiança inicial 0
+      const resDistante = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenAutorDistante}`)
+        .send({
+          tipo: TipoReporte.ESTACAO,
+          estacao_id: estacaoRecife.id,
+          status_estacao: StatusEstacao.ATENCAO,
+          latitude: Number(estacaoRecife.latitude) + 0.1,
+          longitude: Number(estacaoRecife.longitude) + 0.1,
+        })
+        .expect(201);
+
+      // Coordenadas válidas dentro do raio da estação (confiança inicial = peso 1.0 × 10 = 10)
+      const resCriado = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenAutor}`)
+        .send({
+          tipo: TipoReporte.ESTACAO,
+          estacao_id: estacaoRecife.id,
+          status_estacao: StatusEstacao.LOTADA,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      const reporteDistante = resDistante.body as { confianca: number };
+      const reporte = resCriado.body as {
+        id: string;
+        tipo: TipoReporte;
+        status_estacao: StatusEstacao;
+        confianca: number;
+      };
+
+      expect(reporteDistante.confianca).toBe(0);
+      expect(reporte.id).toBeDefined();
+      expect(reporte.tipo).toBe(TipoReporte.ESTACAO);
+      expect(reporte.status_estacao).toBe(StatusEstacao.LOTADA);
+      expect(reporte.confianca).toBe(10);
+
+      // Regra 3.2.1 — Bloqueio de reporte duplicado pelo mesmo autor em 5 min (409 Conflict)
+      const resDuplicado = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenAutor}`)
+        .send({
+          tipo: TipoReporte.ESTACAO,
+          estacao_id: estacaoRecife.id,
+          status_estacao: StatusEstacao.LOTADA,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(409);
+
+      expect((resDuplicado.body as ErroResponse).statusCode).toBe(409);
+
+      // Regra 4.1.4 — Bloqueio de confirmação quando o validador está a mais de 2 km
+      const tokenValidador1 = criarTokenTeste('e2e-validador-03');
+      await request(app.getHttpServer())
+        .post(`/reportes/${reporte.id}/confirmacoes`)
+        .set('Authorization', `Bearer ${tokenValidador1}`)
+        .send({
+          tipo: TipoConfirmacao.CONFIRMAR,
+          latitude: Number(estacaoRecife.latitude) + 0.1,
+          longitude: Number(estacaoRecife.longitude) + 0.1,
+        })
+        .expect(400);
+
+      // 1ª confirmação válida (wConfirm = 1.0 < 2.0 -> PENDENTE)
+      const resConfirm1 = await request(app.getHttpServer())
+        .post(`/reportes/${reporte.id}/confirmacoes`)
+        .set('Authorization', `Bearer ${tokenValidador1}`)
+        .send({
+          tipo: TipoConfirmacao.CONFIRMAR,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      expect((resConfirm1.body as { decisao: string }).decisao).toBe('PENDENTE');
+
+      // 2ª confirmação válida atinge quórum (wConfirm = 2.0 >= 2.0 -> CONFIRMADO, confiança = 20)
+      const tokenValidador2 = criarTokenTeste('e2e-validador-04');
+      const resConfirm2 = await request(app.getHttpServer())
+        .post(`/reportes/${reporte.id}/confirmacoes`)
+        .set('Authorization', `Bearer ${tokenValidador2}`)
+        .send({
+          tipo: TipoConfirmacao.CONFIRMAR,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      const confirmacao2 = resConfirm2.body as {
+        decisao: string;
+        reporte: { confianca: number; reputacao_aplicada: boolean };
+      };
+      expect(confirmacao2.decisao).toBe('CONFIRMADO');
+      expect(confirmacao2.reporte.confianca).toBe(20);
+      expect(confirmacao2.reporte.reputacao_aplicada).toBe(true);
+
+      // Status agregado da estação reflete o reporte confirmado (confiança 20 >= limiar 15)
+      const resStatus = await request(app.getHttpServer())
+        .get(`/estacoes/${estacaoRecife.id}/status`)
+        .expect(200);
+
+      expect(resStatus.body).toMatchObject({
+        status: StatusEstacao.LOTADA,
+        confianca: 20,
+      });
+
+      // Autor recebeu +3 de reputação pelo reporte confirmado
+      const resPerfilAutor = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${tokenAutor}`)
+        .expect(200);
+
+      expect((resPerfilAutor.body as PerfilResponse).usuario.reputacao).toBe(3);
+    });
   });
 });

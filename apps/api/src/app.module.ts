@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsuariosModule } from './usuarios/usuarios.module.js';
 import { LinhasModule } from './linhas/linhas.module.js';
 import { EstacoesModule } from './estacoes/estacoes.module.js';
@@ -20,7 +19,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
       {
         name: 'short',
         ttl: 1_000,
-        limit: 10,
+        limit: Number(process.env.THROTTLE_SHORT_LIMIT ?? 10),
       },
       {
         name: 'default',
