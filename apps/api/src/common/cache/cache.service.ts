@@ -5,9 +5,17 @@ interface Entrada {
   expiraEm: number;
 }
 
+type CacheStore = Map<string, Entrada>;
+
+const storesAtivos = new Set<CacheStore>();
+
 @Injectable()
 export class CacheService {
-  private store = new Map<string, Entrada>();
+  private store: CacheStore = new Map<string, Entrada>();
+
+  constructor() {
+    storesAtivos.add(this.store);
+  }
 
   async get<T = unknown>(chave: string): Promise<T | null> {
     const entrada = this.store.get(chave);
@@ -25,5 +33,11 @@ export class CacheService {
 
   async del(chave: string): Promise<void> {
     this.store.delete(chave);
+  }
+
+  async clear(): Promise<void> {
+    for (const store of storesAtivos) {
+      store.clear();
+    }
   }
 }
