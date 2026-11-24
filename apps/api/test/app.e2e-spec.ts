@@ -1,9 +1,12 @@
 import { INestApplication } from '@nestjs/common';
 import {
+  Sentido,
   StatusEstacao,
+  StatusTrem,
   TipoConfirmacao,
   TipoReporte,
 } from '@sinaleiro/types/enums';
+import { Usuario } from '../src/usuarios/entities/usuario.entity.js';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -39,7 +42,7 @@ interface MapaResponse {
   atualizado_em: string;
   linhas: LinhaResponse[];
   estacoes: EstacaoResponse[];
-  trens: unknown[];
+  trens: TremMapaResponse[];
 }
 
 interface PerfilResponse {
@@ -60,6 +63,26 @@ interface ErroResponse {
   timestamp: string;
   path: string;
   details?: Record<string, unknown>;
+}
+
+interface TremMapaResponse {
+  id: string;
+  linha_id: number;
+  sentido: Sentido;
+  id_vagao: string | null;
+  status_efetivo: {
+    status: StatusTrem;
+    confianca: number;
+    estacao_id: number | null;
+    atualizado_em: string;
+  };
+}
+
+interface MapaResponse {
+  atualizado_em: string;
+  linhas: LinhaResponse[];
+  estacoes: EstacaoResponse[];
+  trens: TremMapaResponse[];
 }
 
 describe('Sinaleiro API (E2E)', () => {
@@ -83,7 +106,7 @@ describe('Sinaleiro API (E2E)', () => {
   });
 
   beforeEach(async () => {
-    await limparDadosTransacionais(dataSource);
+    await limparDadosTransacionais(dataSource, app);
   });
 
   afterAll(async () => {
@@ -321,6 +344,300 @@ describe('Sinaleiro API (E2E)', () => {
         .expect(200);
 
       expect((resPerfilAutor.body as PerfilResponse).usuario.reputacao).toBe(3);
+    });
+  });
+
+  describe('Reportes de Trem (matching e bloqueio em estação fechada)', () => {
+    it('exige reputação >= 10 para criar trem inédito (Regra 7.2.2), agrupa reportes no mesmo vagão/sentido (Regra 7.1) e reflete no /mapa (Regra 5.3)', async () => {
+      const tokenNovato = criarTokenTeste('e2e-trem-novato-01');
+      const tokenVeterano = criarTokenTeste('e2e-trem-veterano-02');
+      const tokenPassageiro2 = criarTokenTeste('e2e-trem-passageiro-03');
+
+      // Regra 7.2.2 — Passageiro com reputação 0 não pode registrar trem inédito (403)
+      await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenNovato}`)
+        .send({
+          tipo: TipoReporte.TREM,
+          linha_id: estacaoRecife.linha_id,
+          sentido: Sentido.CAMARAGIBE,
+          estacao_id: estacaoRecife.id,
+          id_vagao: 'TUE-101',
+          status_trem: StatusTrem.LOTADO,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(403);
+
+      // Provisiona veterano e eleva reputação para 10
+      await request(app.getHttpServer())
+        .post('/auth/sync')
+        .set('Authorization', `Bearer ${tokenVeterano}`)
+        .expect(200);
+      await dataSource
+        .getRepository(Usuario)
+        .update({ firebase_uid: 'e2e-trem-veterano-02' }, { reputacao: 10 });
+
+      // 1º reporte no vagão TUE-101 sentido CAMARAGIBE pelo veterano -> cria trem e reporte (201)
+      const resTrem1 = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenVeterano}`)
+        .send({
+          tipo: TipoReporte.TREM,
+          linha_id: estacaoRecife.linha_id,
+          sentido: Sentido.CAMARAGIBE,
+          estacao_id: estacaoRecife.id,
+          id_vagao: 'TUE-101',
+          status_trem: StatusTrem.LOTADO,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      const reporteTrem1 = resTrem1.body as {
+        id: string;
+        tipo: TipoReporte;
+        trem_id: string | null;
+        linha_id: number | null;
+        estacao_id: number | null;
+        status_trem: StatusTrem | null;
+        confianca: number;
+      };
+
+      expect(reporteTrem1.tipo).toBe(TipoReporte.TREM);
+      expect(reporteTrem1.trem_id).toBeTruthy();
+      // Constraint reporte_alvo_unico: reportes de TREM persistem trem_id e mantêm linha_id nulo
+      expect(reporteTrem1.linha_id).toBeNull();
+      expect(reporteTrem1.estacao_id).toBe(estacaoRecife.id);
+      expect(reporteTrem1.status_trem).toBe(StatusTrem.LOTADO);
+      expect(reporteTrem1.confianca).toBe(10);
+
+      // 2º reporte no mesmo vagão/linha/sentido por passageiro com reputação 0 -> reutiliza o trem_id existente
+      const resTrem2 = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenPassageiro2}`)
+        .send({
+          tipo: TipoReporte.TREM,
+          linha_id: estacaoRecife.linha_id,
+          sentido: Sentido.CAMARAGIBE,
+          estacao_id: estacaoRecife.id,
+          id_vagao: 'TUE-101',
+          status_trem: StatusTrem.ATRASO,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      const reporteTrem2 = resTrem2.body as {
+        id: string;
+        trem_id: string | null;
+        status_trem: StatusTrem | null;
+      };
+
+      expect(reporteTrem2.id).not.toBe(reporteTrem1.id);
+      expect(reporteTrem2.trem_id).toBe(reporteTrem1.trem_id);
+
+      // 3º reporte com vagão distinto (TUE-202) pelo veterano -> cria um segundo trem
+      const resTremOutroVagao = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenVeterano}`)
+        .send({
+          tipo: TipoReporte.TREM,
+          linha_id: estacaoRecife.linha_id,
+          sentido: Sentido.CAMARAGIBE,
+          estacao_id: estacaoRecife.id,
+          id_vagao: 'TUE-202',
+          status_trem: StatusTrem.NORMAL,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      const reporteTremOutro = resTremOutroVagao.body as {
+        trem_id: string | null;
+      };
+      expect(reporteTremOutro.trem_id).toBeTruthy();
+      expect(reporteTremOutro.trem_id).not.toBe(reporteTrem1.trem_id);
+
+      // Regra 5.3 — GET /mapa exibe o trem ativo com o status válido mais recente (ATRASO)
+      const resMapa = await request(app.getHttpServer()).get('/mapa').expect(200);
+      const mapa = resMapa.body as MapaResponse;
+      const tremNoMapa = mapa.trens.find((t) => t.id === reporteTrem1.trem_id);
+
+      expect(tremNoMapa).toBeDefined();
+      expect(tremNoMapa?.id_vagao).toBe('TUE-101');
+      expect(tremNoMapa?.status_efetivo.status).toBe(StatusTrem.ATRASO);
+    });
+
+    it('bloqueia reporte de TREM com 403 quando a estação de avistamento está FECHADA', async () => {
+      const tokenAutorFechada = criarTokenTeste('e2e-fechada-autor-01');
+      const tokenValidador1 = criarTokenTeste('e2e-fechada-val-01');
+      const tokenValidador2 = criarTokenTeste('e2e-fechada-val-02');
+      const tokenPassageiroTrem = criarTokenTeste('e2e-trem-bloqueado-01');
+
+      // Reporta estação como FECHADA e atinge quórum de confirmação (confiança 20 >= 15)
+      const resEstacaoFechada = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenAutorFechada}`)
+        .send({
+          tipo: TipoReporte.ESTACAO,
+          estacao_id: estacaoRecife.id,
+          status_estacao: StatusEstacao.FECHADA,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      const reporteFechada = resEstacaoFechada.body as { id: string };
+
+      for (const token of [tokenValidador1, tokenValidador2]) {
+        await request(app.getHttpServer())
+          .post(`/reportes/${reporteFechada.id}/confirmacoes`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({
+            tipo: TipoConfirmacao.CONFIRMAR,
+            latitude: Number(estacaoRecife.latitude),
+            longitude: Number(estacaoRecife.longitude),
+          })
+          .expect(201);
+      }
+
+      // Tentativa de reportar trem na estação fechada deve retornar 403 Forbidden
+      const resBloqueado = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenPassageiroTrem}`)
+        .send({
+          tipo: TipoReporte.TREM,
+          linha_id: estacaoRecife.linha_id,
+          sentido: Sentido.CAMARAGIBE,
+          estacao_id: estacaoRecife.id,
+          id_vagao: 'TUE-303',
+          status_trem: StatusTrem.NORMAL,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(403);
+
+      const erro = resBloqueado.body as ErroResponse;
+      expect(erro.statusCode).toBe(403);
+      expect(erro.message).toContain('estação fechada');
+    });
+  });
+
+  describe('Refutação de reportes e Cooldown pós-refutação', () => {
+    it('refuta reporte ao atingir quórum de discordância, penaliza reputações e aplica peso 0.5 no cooldown de 15 min', async () => {
+      const tokenAutor = criarTokenTeste('e2e-refutado-autor-01');
+      const tokenApoiador = criarTokenTeste('e2e-refutado-apoiador-01');
+      const tokensDiscordantes = [
+        criarTokenTeste('e2e-refutado-disc-01'),
+        criarTokenTeste('e2e-refutado-disc-02'),
+        criarTokenTeste('e2e-refutado-disc-03'),
+      ];
+
+      // Autor cria reporte de estação PARALISADA dentro do raio (confiança inicial = 10)
+      const resReporte = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenAutor}`)
+        .send({
+          tipo: TipoReporte.ESTACAO,
+          estacao_id: estacaoRecife.id,
+          status_estacao: StatusEstacao.PARALISADA,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      const reporte = resReporte.body as { id: string; confianca: number };
+      expect(reporte.confianca).toBe(10);
+
+      // Um passageiro confirma (wConfirm = 1.0 -> ainda PENDENTE)
+      await request(app.getHttpServer())
+        .post(`/reportes/${reporte.id}/confirmacoes`)
+        .set('Authorization', `Bearer ${tokenApoiador}`)
+        .send({
+          tipo: TipoConfirmacao.CONFIRMAR,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      // 3 discordâncias atingem wDiscord = 3.0 >= wConfirm (1.0) + limiar (1.5) -> REFUTADO
+      await request(app.getHttpServer())
+        .post(`/reportes/${reporte.id}/confirmacoes`)
+        .set('Authorization', `Bearer ${tokensDiscordantes[0]}`)
+        .send({
+          tipo: TipoConfirmacao.DISCORDAR,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post(`/reportes/${reporte.id}/confirmacoes`)
+        .set('Authorization', `Bearer ${tokensDiscordantes[1]}`)
+        .send({
+          tipo: TipoConfirmacao.DISCORDAR,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      const resTerceiraDiscordancia = await request(app.getHttpServer())
+        .post(`/reportes/${reporte.id}/confirmacoes`)
+        .set('Authorization', `Bearer ${tokensDiscordantes[2]}`)
+        .send({
+          tipo: TipoConfirmacao.DISCORDAR,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      const resultadoRefutacao = resTerceiraDiscordancia.body as {
+        decisao: string;
+        reporte: { ativo: boolean; reputacao_aplicada: boolean };
+      };
+      expect(resultadoRefutacao.decisao).toBe('REFUTADO');
+      expect(resultadoRefutacao.reporte.ativo).toBe(false);
+      expect(resultadoRefutacao.reporte.reputacao_aplicada).toBe(true);
+
+      // Reporte refutado deixa de aparecer na listagem de reportes ativos
+      const resAtivos = await request(app.getHttpServer())
+        .get('/reportes')
+        .query({ alvo: 'estacao', id: estacaoRecife.id })
+        .expect(200);
+
+      const ativos = resAtivos.body as Array<{ id: string }>;
+      expect(ativos.some((r) => r.id === reporte.id)).toBe(false);
+
+      // Penalidades aplicadas: autor (-5) e apoiador de reporte refutado (-1)
+      const resPerfilAutor = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${tokenAutor}`)
+        .expect(200);
+      expect((resPerfilAutor.body as PerfilResponse).usuario.reputacao).toBe(-5);
+
+      const resPerfilApoiador = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${tokenApoiador}`)
+        .expect(200);
+      expect((resPerfilApoiador.body as PerfilResponse).usuario.reputacao).toBe(
+        -1,
+      );
+
+      // Regra 3.2.3 — Novo reporte do autor dentro de 15 min sofre cooldown (peso 0.5 -> confiança 5)
+      const resPosCooldown = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenAutor}`)
+        .send({
+          tipo: TipoReporte.ESTACAO,
+          estacao_id: estacaoRecife.id,
+          status_estacao: StatusEstacao.ATENCAO,
+          latitude: Number(estacaoRecife.latitude),
+          longitude: Number(estacaoRecife.longitude),
+        })
+        .expect(201);
+
+      expect((resPosCooldown.body as { confianca: number }).confianca).toBe(5);
     });
   });
 });

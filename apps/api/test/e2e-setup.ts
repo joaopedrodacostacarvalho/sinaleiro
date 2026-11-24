@@ -14,6 +14,7 @@ import { LinhaSentido } from '../src/linhas/entities/linha-sentido.entity/linha-
 import { AppModule } from '../src/app.module.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { SeedService } from '../src/database/seeds/seed.service.js';
+import { CacheService } from '../src/common/cache/cache.service.js';
 
 export function criarTokenTeste(
   uid: string,
@@ -104,16 +105,19 @@ const ENTIDADES_CATALOGO = new Set<unknown>([Linha, LinhaSentido, Estacao]);
 
 export async function limparDadosTransacionais(
   dataSource: DataSource,
+  app?: INestApplication,
 ): Promise<void> {
   const tabelasTransacionais = dataSource.entityMetadatas
     .filter((meta) => !ENTIDADES_CATALOGO.has(meta.target))
     .map((meta) => `"${meta.tableName}"`);
 
-  if (tabelasTransacionais.length === 0) {
-    return;
+  if (tabelasTransacionais.length > 0) {
+    await dataSource.query(
+      `TRUNCATE TABLE ${tabelasTransacionais.join(', ')} RESTART IDENTITY CASCADE;`,
+    );
   }
 
-  await dataSource.query(
-    `TRUNCATE TABLE ${tabelasTransacionais.join(', ')} RESTART IDENTITY CASCADE;`,
-  );
+  if (app) {
+    await app.get(CacheService).clear();
+  }
 }
