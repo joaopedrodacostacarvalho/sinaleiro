@@ -21,6 +21,7 @@ services:
       build:
         context: .
         dockerfile: apps/api/Dockerfile
+        target: development
       container_name: backend_api_dev
       ports:
         - "${PORT:-3000}:3000"
