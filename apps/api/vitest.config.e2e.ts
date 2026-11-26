@@ -24,6 +24,10 @@ export default defineConfig(
       fileParallelism: false,
       env: {
         NODE_ENV: 'test',
+        DB_HOST: process.env.DB_HOST ?? 'localhost',
+        DB_PORT: process.env.DB_PORT ?? '5432',
+        DB_USER: process.env.DB_USER ?? 'postgres',
+        DB_PASSWORD: process.env.DB_PASSWORD ?? 'postgres',
         DB_NAME: process.env.E2E_DB_NAME ?? 'sinaleiro_test',
         TYPEORM_SYNCHRONIZE: 'false',
         TYPEORM_MIGRATIONS_RUN: 'true',

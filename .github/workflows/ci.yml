@@ -51,9 +51,16 @@ jobs:
       postgres:
         image: postgres:17-alpine
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: sinaleiro_test
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: sinaleiro_test
+          TYPEORM_SYNCHRONIZE: 'false'
+          TYPEORM_MIGRATIONS_RUN: 'true'
+          THROTTLE_SHORT_LIMIT: '1000'
+          THROTTLE_LIMIT: '1000'
         ports:
           - 5432:5432
         options: >-

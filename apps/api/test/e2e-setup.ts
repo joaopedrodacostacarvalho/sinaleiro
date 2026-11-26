@@ -3,6 +3,7 @@ import {
   INestApplication,
   UnauthorizedException,
   ValidationPipe,
+  VersioningType,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { DecodedIdToken } from 'firebase-admin/auth';
@@ -23,6 +24,11 @@ export function criarTokenTeste(
 ): string {
   return `test-token:${uid}:${email}:${encodeURIComponent(nome)}`;
 }
+
+process.env.NODE_ENV = 'test';
+process.env.DB_NAME = process.env.E2E_DB_NAME ?? 'sinaleiro_test';
+process.env.TYPEORM_SYNCHRONIZE = 'false';
+process.env.TYPEORM_MIGRATIONS_RUN = 'true';
 
 export async function criarAppE2E(): Promise<{
   app: INestApplication;
@@ -82,6 +88,11 @@ export async function criarAppE2E(): Promise<{
     .compile();
 
   const app = moduleRef.createNestApplication();
+
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1',
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({
