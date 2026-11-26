@@ -12,6 +12,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
+import { HealthModule } from './health/health.module.js';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
     ReportesModule,
     ReputacaoModule,
     DatabaseModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [
