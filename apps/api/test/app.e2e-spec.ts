@@ -100,7 +100,7 @@ describe('Sinaleiro API (E2E)', () => {
     dataSource = setup.dataSource;
 
     const resEstacoes = await request(app.getHttpServer())
-      .get('/estacoes')
+      .get('/v1/estacoes')
       .expect(200);
 
     const estacoes = resEstacoes.body as EstacaoResponse[];
@@ -126,7 +126,7 @@ describe('Sinaleiro API (E2E)', () => {
 
   describe('Catálogo Metrorec e Mapa agregado', () => {
     it('GET /mapa retorna linhas e estações populadas pelas migrações e seed', async () => {
-      const res = await request(app.getHttpServer()).get('/mapa').expect(200);
+      const res = await request(app.getHttpServer()).get('/v1/mapa').expect(200);
       const body = res.body as MapaResponse;
 
       expect(body.atualizado_em).toBeDefined();
@@ -136,27 +136,27 @@ describe('Sinaleiro API (E2E)', () => {
 
     it('GET /linhas e GET /linhas/:id retornam dados válidos e 404 padronizado', async () => {
       const resLista = await request(app.getHttpServer())
-        .get('/linhas')
+        .get('/v1/linhas')
         .expect(200);
       const linhas = resLista.body as LinhaResponse[];
       expect(linhas.length).toBeGreaterThanOrEqual(2);
 
       const resDetalhe = await request(app.getHttpServer())
-        .get(`/linhas/${linhas[0].id}`)
+        .get(`/v1/linhas/${linhas[0].id}`)
         .expect(200);
       expect((resDetalhe.body as LinhaResponse).nome).toBe(linhas[0].nome);
 
       const resInexistente = await request(app.getHttpServer())
-        .get('/linhas/999999')
+        .get('/v1/linhas/999999')
         .expect(404);
       const erro = resInexistente.body as ErroResponse;
       expect(erro.statusCode).toBe(404);
-      expect(erro.path).toBe('/linhas/999999');
+      expect(erro.path).toBe('/v1/linhas/999999');
     });
 
     it('GET /estacoes/proximas encontra estações próximas às coordenadas da Estação Recife', async () => {
       const res = await request(app.getHttpServer())
-        .get('/estacoes/proximas')
+        .get('/v1/estacoes/proximas')
         .query({
           lat: estacaoRecife.latitude,
           lng: estacaoRecife.longitude,
@@ -174,12 +174,12 @@ describe('Sinaleiro API (E2E)', () => {
   describe('Autenticação (/auth/*) e HttpExceptionFilter', () => {
     it('bloqueia acesso sem Bearer token com 401 padronizado', async () => {
       const res = await request(app.getHttpServer())
-        .get('/auth/me')
+        .get('/v1/auth/me')
         .expect(401);
 
       const erro = res.body as ErroResponse;
       expect(erro.statusCode).toBe(401);
-      expect(erro.path).toBe('/auth/me');
+      expect(erro.path).toBe('/v1/auth/me');
       expect(erro.timestamp).toBeDefined();
     });
 
@@ -191,7 +191,7 @@ describe('Sinaleiro API (E2E)', () => {
       );
 
       const resSync = await request(app.getHttpServer())
-        .post('/auth/sync')
+        .post('/v1/auth/sync')
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
@@ -201,7 +201,7 @@ describe('Sinaleiro API (E2E)', () => {
       expect(perfilSync.peso).toBe(1);
 
       const resMe = await request(app.getHttpServer())
-        .get('/auth/me')
+        .get('/v1/auth/me')
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
@@ -212,7 +212,7 @@ describe('Sinaleiro API (E2E)', () => {
 
     it('POST /auth/custom-token emite token fora de produção e valida DTO', async () => {
       const resOk = await request(app.getHttpServer())
-        .post('/auth/custom-token')
+        .post('/v1/auth/custom-token')
         .send({ uid: 'e2e-local-uid' })
         .expect(200);
 
@@ -221,7 +221,7 @@ describe('Sinaleiro API (E2E)', () => {
       );
 
       const resInvalido = await request(app.getHttpServer())
-        .post('/auth/custom-token')
+        .post('/v1/auth/custom-token')
         .send({ uid: '', campoExtra: true })
         .expect(400);
 
@@ -238,7 +238,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Regra 3.2.5 — Criação fora do raio (> 2 km) é aceita com confiança inicial 0
       const resDistante = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenAutorDistante}`)
         .send({
           tipo: TipoReporte.ESTACAO,
@@ -251,7 +251,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Coordenadas válidas dentro do raio da estação (confiança inicial = peso 1.0 × 10 = 10)
       const resCriado = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenAutor}`)
         .send({
           tipo: TipoReporte.ESTACAO,
@@ -278,7 +278,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Regra 3.2.1 — Bloqueio de reporte duplicado pelo mesmo autor em 5 min (409 Conflict)
       const resDuplicado = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenAutor}`)
         .send({
           tipo: TipoReporte.ESTACAO,
@@ -294,7 +294,7 @@ describe('Sinaleiro API (E2E)', () => {
       // Regra 4.1.4 — Bloqueio de confirmação quando o validador está a mais de 2 km
       const tokenValidador1 = criarTokenTeste('e2e-validador-03');
       await request(app.getHttpServer())
-        .post(`/reportes/${reporte.id}/confirmacoes`)
+        .post(`/v1/reportes/${reporte.id}/confirmacoes`)
         .set('Authorization', `Bearer ${tokenValidador1}`)
         .send({
           tipo: TipoConfirmacao.CONFIRMAR,
@@ -305,7 +305,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // 1ª confirmação válida (wConfirm = 1.0 < 2.0 -> PENDENTE)
       const resConfirm1 = await request(app.getHttpServer())
-        .post(`/reportes/${reporte.id}/confirmacoes`)
+        .post(`/v1/reportes/${reporte.id}/confirmacoes`)
         .set('Authorization', `Bearer ${tokenValidador1}`)
         .send({
           tipo: TipoConfirmacao.CONFIRMAR,
@@ -319,7 +319,7 @@ describe('Sinaleiro API (E2E)', () => {
       // 2ª confirmação válida atinge quórum (wConfirm = 2.0 >= 2.0 -> CONFIRMADO, confiança = 20)
       const tokenValidador2 = criarTokenTeste('e2e-validador-04');
       const resConfirm2 = await request(app.getHttpServer())
-        .post(`/reportes/${reporte.id}/confirmacoes`)
+        .post(`/v1/reportes/${reporte.id}/confirmacoes`)
         .set('Authorization', `Bearer ${tokenValidador2}`)
         .send({
           tipo: TipoConfirmacao.CONFIRMAR,
@@ -338,7 +338,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Status agregado da estação reflete o reporte confirmado (confiança 20 >= limiar 15)
       const resStatus = await request(app.getHttpServer())
-        .get(`/estacoes/${estacaoRecife.id}/status`)
+        .get(`/v1/estacoes/${estacaoRecife.id}/status`)
         .expect(200);
 
       expect(resStatus.body).toMatchObject({
@@ -348,7 +348,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Autor recebeu +3 de reputação pelo reporte confirmado
       const resPerfilAutor = await request(app.getHttpServer())
-        .get('/auth/me')
+        .get('/v1/auth/me')
         .set('Authorization', `Bearer ${tokenAutor}`)
         .expect(200);
 
@@ -364,7 +364,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Regra 7.2.2 — Passageiro com reputação 0 não pode registrar trem inédito (403)
       await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenNovato}`)
         .send({
           tipo: TipoReporte.TREM,
@@ -380,7 +380,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Provisiona veterano e eleva reputação para 10
       await request(app.getHttpServer())
-        .post('/auth/sync')
+        .post('/v1/auth/sync')
         .set('Authorization', `Bearer ${tokenVeterano}`)
         .expect(200);
       await dataSource
@@ -389,7 +389,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // 1º reporte no vagão TUE-101 sentido CAMARAGIBE pelo veterano -> cria trem e reporte (201)
       const resTrem1 = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenVeterano}`)
         .send({
           tipo: TipoReporte.TREM,
@@ -423,7 +423,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // 2º reporte no mesmo vagão/linha/sentido por passageiro com reputação 0 -> reutiliza o trem_id existente
       const resTrem2 = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenPassageiro2}`)
         .send({
           tipo: TipoReporte.TREM,
@@ -448,7 +448,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // 3º reporte com vagão distinto (TUE-202) pelo veterano -> cria um segundo trem
       const resTremOutroVagao = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenVeterano}`)
         .send({
           tipo: TipoReporte.TREM,
@@ -469,7 +469,7 @@ describe('Sinaleiro API (E2E)', () => {
       expect(reporteTremOutro.trem_id).not.toBe(reporteTrem1.trem_id);
 
       // Regra 5.3 — GET /mapa exibe o trem ativo com o status válido mais recente (ATRASO)
-      const resMapa = await request(app.getHttpServer()).get('/mapa').expect(200);
+      const resMapa = await request(app.getHttpServer()).get('/v1/mapa').expect(200);
       const mapa = resMapa.body as MapaResponse;
       const tremNoMapa = mapa.trens.find((t) => t.id === reporteTrem1.trem_id);
 
@@ -486,7 +486,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Reporta estação como FECHADA e atinge quórum de confirmação (confiança 20 >= 15)
       const resEstacaoFechada = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenAutorFechada}`)
         .send({
           tipo: TipoReporte.ESTACAO,
@@ -501,7 +501,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       for (const token of [tokenValidador1, tokenValidador2]) {
         await request(app.getHttpServer())
-          .post(`/reportes/${reporteFechada.id}/confirmacoes`)
+          .post(`/v1/reportes/${reporteFechada.id}/confirmacoes`)
           .set('Authorization', `Bearer ${token}`)
           .send({
             tipo: TipoConfirmacao.CONFIRMAR,
@@ -513,7 +513,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Tentativa de reportar trem na estação fechada deve retornar 403 Forbidden
       const resBloqueado = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenPassageiroTrem}`)
         .send({
           tipo: TipoReporte.TREM,
@@ -545,7 +545,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Autor cria reporte de estação PARALISADA dentro do raio (confiança inicial = 10)
       const resReporte = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenAutor}`)
         .send({
           tipo: TipoReporte.ESTACAO,
@@ -561,7 +561,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Um passageiro confirma (wConfirm = 1.0 -> ainda PENDENTE)
       await request(app.getHttpServer())
-        .post(`/reportes/${reporte.id}/confirmacoes`)
+        .post(`/v1/reportes/${reporte.id}/confirmacoes`)
         .set('Authorization', `Bearer ${tokenApoiador}`)
         .send({
           tipo: TipoConfirmacao.CONFIRMAR,
@@ -572,7 +572,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // 3 discordâncias atingem wDiscord = 3.0 >= wConfirm (1.0) + limiar (1.5) -> REFUTADO
       await request(app.getHttpServer())
-        .post(`/reportes/${reporte.id}/confirmacoes`)
+        .post(`/v1/reportes/${reporte.id}/confirmacoes`)
         .set('Authorization', `Bearer ${tokensDiscordantes[0]}`)
         .send({
           tipo: TipoConfirmacao.DISCORDAR,
@@ -582,7 +582,7 @@ describe('Sinaleiro API (E2E)', () => {
         .expect(201);
 
       await request(app.getHttpServer())
-        .post(`/reportes/${reporte.id}/confirmacoes`)
+        .post(`/v1/reportes/${reporte.id}/confirmacoes`)
         .set('Authorization', `Bearer ${tokensDiscordantes[1]}`)
         .send({
           tipo: TipoConfirmacao.DISCORDAR,
@@ -592,7 +592,7 @@ describe('Sinaleiro API (E2E)', () => {
         .expect(201);
 
       const resTerceiraDiscordancia = await request(app.getHttpServer())
-        .post(`/reportes/${reporte.id}/confirmacoes`)
+        .post(`/v1/reportes/${reporte.id}/confirmacoes`)
         .set('Authorization', `Bearer ${tokensDiscordantes[2]}`)
         .send({
           tipo: TipoConfirmacao.DISCORDAR,
@@ -611,7 +611,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Reporte refutado deixa de aparecer na listagem de reportes ativos
       const resAtivos = await request(app.getHttpServer())
-        .get('/reportes')
+        .get('/v1/reportes')
         .query({ alvo: 'estacao', id: estacaoRecife.id })
         .expect(200);
 
@@ -620,13 +620,13 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Penalidades aplicadas: autor (-5) e apoiador de reporte refutado (-1)
       const resPerfilAutor = await request(app.getHttpServer())
-        .get('/auth/me')
+        .get('/v1/auth/me')
         .set('Authorization', `Bearer ${tokenAutor}`)
         .expect(200);
       expect((resPerfilAutor.body as PerfilResponse).usuario.reputacao).toBe(-5);
 
       const resPerfilApoiador = await request(app.getHttpServer())
-        .get('/auth/me')
+        .get('/v1/auth/me')
         .set('Authorization', `Bearer ${tokenApoiador}`)
         .expect(200);
       expect((resPerfilApoiador.body as PerfilResponse).usuario.reputacao).toBe(
@@ -635,7 +635,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Regra 3.2.3 — Novo reporte do autor dentro de 15 min sofre cooldown (peso 0.5 -> confiança 5)
       const resPosCooldown = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenAutor}`)
         .send({
           tipo: TipoReporte.ESTACAO,
@@ -662,7 +662,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // 1. Reporte inicial PARALISADA na Estação Recife sem quórum (confiança = 10 < 20)
       const resRepRecife = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenAutor1}`)
         .send({
           tipo: TipoReporte.ESTACAO,
@@ -677,7 +677,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Regra 5.2.1 — Confiança 10 (< 20) não contamina o status da linha
       const resLinhaInicial = await request(app.getHttpServer())
-        .get(`/linhas/${linhaId}/status`)
+        .get(`/v1/linhas/${linhaId}/status`)
         .expect(200);
 
       expect(resLinhaInicial.body).toMatchObject({
@@ -688,7 +688,7 @@ describe('Sinaleiro API (E2E)', () => {
       // 2. Duas confirmações elevam a Estação Recife para confiança = 20 (>= 20)
       for (const token of [tokenValidador1, tokenValidador2]) {
         await request(app.getHttpServer())
-          .post(`/reportes/${reporteRecife.id}/confirmacoes`)
+          .post(`/v1/reportes/${reporteRecife.id}/confirmacoes`)
           .set('Authorization', `Bearer ${token}`)
           .send({
             tipo: TipoConfirmacao.CONFIRMAR,
@@ -700,7 +700,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Regra 5.2 — 1 estação PARALISADA com confiança >= 20 deriva status ATENCAO na linha
       const resLinhaAtencao = await request(app.getHttpServer())
-        .get(`/linhas/${linhaId}/status`)
+        .get(`/v1/linhas/${linhaId}/status`)
         .expect(200);
 
       expect(resLinhaAtencao.body).toMatchObject({
@@ -710,7 +710,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // 3. Segunda estação da mesma linha (Joana Bezerra) reportada como PARALISADA e confirmada
       const resRepJoana = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenAutor2}`)
         .send({
           tipo: TipoReporte.ESTACAO,
@@ -725,7 +725,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       for (const token of [tokenValidador3, tokenValidador4]) {
         await request(app.getHttpServer())
-          .post(`/reportes/${reporteJoana.id}/confirmacoes`)
+          .post(`/v1/reportes/${reporteJoana.id}/confirmacoes`)
           .set('Authorization', `Bearer ${token}`)
           .send({
             tipo: TipoConfirmacao.CONFIRMAR,
@@ -737,7 +737,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Regra 5.2 — 2 estações PARALISADAS com confiança >= 20 derivam status PARALISADA na linha
       const resLinhaParalisada = await request(app.getHttpServer())
-        .get(`/linhas/${linhaId}/status`)
+        .get(`/v1/linhas/${linhaId}/status`)
         .expect(200);
 
       expect(resLinhaParalisada.body).toMatchObject({
@@ -757,7 +757,7 @@ describe('Sinaleiro API (E2E)', () => {
         const tokenVal2 = criarTokenTeste(`e2e-atencao-val2-${i}`);
 
         const resRep = await request(app.getHttpServer())
-          .post('/reportes')
+          .post('/v1/reportes')
           .set('Authorization', `Bearer ${tokenAutor}`)
           .send({
             tipo: TipoReporte.ESTACAO,
@@ -772,7 +772,7 @@ describe('Sinaleiro API (E2E)', () => {
 
         for (const token of [tokenVal1, tokenVal2]) {
           await request(app.getHttpServer())
-            .post(`/reportes/${rep.id}/confirmacoes`)
+            .post(`/v1/reportes/${rep.id}/confirmacoes`)
             .set('Authorization', `Bearer ${token}`)
             .send({
               tipo: TipoConfirmacao.CONFIRMAR,
@@ -783,7 +783,7 @@ describe('Sinaleiro API (E2E)', () => {
         }
 
         const resLinha = await request(app.getHttpServer())
-          .get(`/linhas/${linhaId}/status`)
+          .get(`/v1/linhas/${linhaId}/status`)
           .expect(200);
 
         if (i === 0) {
@@ -815,7 +815,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // 1. Cria e confirma reporte de ESTACAO (TTL esperado ~30 min)
       const resEstacao = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenAutor}`)
         .send({
           tipo: TipoReporte.ESTACAO,
@@ -840,7 +840,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       for (const token of [tokenVal1, tokenVal2]) {
         await request(app.getHttpServer())
-          .post(`/reportes/${repEstacao.id}/confirmacoes`)
+          .post(`/v1/reportes/${repEstacao.id}/confirmacoes`)
           .set('Authorization', `Bearer ${token}`)
           .send({
             tipo: TipoConfirmacao.CONFIRMAR,
@@ -852,7 +852,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // 2. Cria e confirma reporte explícito de LINHA (TTL esperado ~30 min)
       const resLinha = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenLinhaAutor}`)
         .send({
           tipo: TipoReporte.LINHA,
@@ -875,7 +875,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       for (const token of [tokenLinhaVal1, tokenLinhaVal2]) {
         await request(app.getHttpServer())
-          .post(`/reportes/${repLinha.id}/confirmacoes`)
+          .post(`/v1/reportes/${repLinha.id}/confirmacoes`)
           .set('Authorization', `Bearer ${token}`)
           .send({
             tipo: TipoConfirmacao.CONFIRMAR,
@@ -885,7 +885,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Confirma que ambos os status ativos refletem os reportes antes da expiração
       const resStatusEstacaoAtivo = await request(app.getHttpServer())
-        .get(`/estacoes/${estacaoRecife.id}/status`)
+        .get(`/v1/estacoes/${estacaoRecife.id}/status`)
         .expect(200);
       expect(resStatusEstacaoAtivo.body).toMatchObject({
         status: StatusEstacao.LOTADA,
@@ -893,7 +893,7 @@ describe('Sinaleiro API (E2E)', () => {
       });
 
       const resStatusLinhaAtivo = await request(app.getHttpServer())
-        .get(`/linhas/${linhaId}/status`)
+        .get(`/v1/linhas/${linhaId}/status`)
         .expect(200);
       expect(resStatusLinhaAtivo.body).toMatchObject({
         status: StatusLinha.PARALISADA,
@@ -909,7 +909,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Recria os reportes já vencidos para validar filtragem por data_hora_expiracao
       await request(app.getHttpServer())
-        .post('/auth/sync')
+        .post('/v1/auth/sync')
         .set('Authorization', `Bearer ${tokenAutor}`)
         .expect(200);
       const autorDb = await dataSource
@@ -917,7 +917,7 @@ describe('Sinaleiro API (E2E)', () => {
         .findOneByOrFail({ firebase_uid: 'e2e-exp-estacao-autor' });
 
       await request(app.getHttpServer())
-        .post('/auth/sync')
+        .post('/v1/auth/sync')
         .set('Authorization', `Bearer ${tokenLinhaAutor}`)
         .expect(200);
       const linhaAutorDb = await dataSource
@@ -959,7 +959,7 @@ describe('Sinaleiro API (E2E)', () => {
       ]);
 
       const resEstacaoAposExpirar = await request(app.getHttpServer())
-        .get(`/estacoes/${estacaoRecife.id}/status`)
+        .get(`/v1/estacoes/${estacaoRecife.id}/status`)
         .expect(200);
       expect(resEstacaoAposExpirar.body).toMatchObject({
         status: StatusEstacao.NORMAL,
@@ -967,7 +967,7 @@ describe('Sinaleiro API (E2E)', () => {
       });
 
       const resLinhaAposExpirar = await request(app.getHttpServer())
-        .get(`/linhas/${linhaId}/status`)
+        .get(`/v1/linhas/${linhaId}/status`)
         .expect(200);
       expect(resLinhaAposExpirar.body).toMatchObject({
         status: StatusLinha.NORMAL,
@@ -975,7 +975,7 @@ describe('Sinaleiro API (E2E)', () => {
       });
 
       const resListagemAtivos = await request(app.getHttpServer())
-        .get('/reportes')
+        .get('/v1/reportes')
         .expect(200);
       expect((resListagemAtivos.body as unknown[]).length).toBe(0);
     });
@@ -983,7 +983,7 @@ describe('Sinaleiro API (E2E)', () => {
     it('configura TTL de ~5 min para TREM e remove trem expirado de GET /mapa', async () => {
       const tokenVeterano = criarTokenTeste('e2e-exp-trem-vet');
       await request(app.getHttpServer())
-        .post('/auth/sync')
+        .post('/v1/auth/sync')
         .set('Authorization', `Bearer ${tokenVeterano}`)
         .expect(200);
       await dataSource
@@ -991,7 +991,7 @@ describe('Sinaleiro API (E2E)', () => {
         .update({ firebase_uid: 'e2e-exp-trem-vet' }, { reputacao: 10 });
 
       const resTrem = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenVeterano}`)
         .send({
           tipo: TipoReporte.TREM,
@@ -1020,7 +1020,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Antes de expirar, trem aparece em GET /mapa
       const resMapaAntes = await request(app.getHttpServer())
-        .get('/mapa')
+        .get('/v1/mapa')
         .expect(200);
       expect(
         (resMapaAntes.body as MapaResponse).trens.some(
@@ -1035,7 +1035,7 @@ describe('Sinaleiro API (E2E)', () => {
       await app.get(CacheService).clear();
 
       const resMapaDepois = await request(app.getHttpServer())
-        .get('/mapa')
+        .get('/v1/mapa')
         .expect(200);
       expect(
         (resMapaDepois.body as MapaResponse).trens.some(
@@ -1058,7 +1058,7 @@ describe('Sinaleiro API (E2E)', () => {
         const tokenVal2 = criarTokenTeste(`e2e-prio-est-val2-${i}`);
 
         const resRep = await request(app.getHttpServer())
-          .post('/reportes')
+          .post('/v1/reportes')
           .set('Authorization', `Bearer ${tokenAutor}`)
           .send({
             tipo: TipoReporte.ESTACAO,
@@ -1073,7 +1073,7 @@ describe('Sinaleiro API (E2E)', () => {
 
         for (const token of [tokenVal1, tokenVal2]) {
           await request(app.getHttpServer())
-            .post(`/reportes/${rep.id}/confirmacoes`)
+            .post(`/v1/reportes/${rep.id}/confirmacoes`)
             .set('Authorization', `Bearer ${token}`)
             .send({
               tipo: TipoConfirmacao.CONFIRMAR,
@@ -1085,7 +1085,7 @@ describe('Sinaleiro API (E2E)', () => {
       }
 
       const resDerivadoAntes = await request(app.getHttpServer())
-        .get(`/linhas/${linhaId}/status`)
+        .get(`/v1/linhas/${linhaId}/status`)
         .expect(200);
       expect(resDerivadoAntes.body).toMatchObject({
         status: StatusLinha.PARALISADA,
@@ -1098,7 +1098,7 @@ describe('Sinaleiro API (E2E)', () => {
       const tokenLinhaVal2 = criarTokenTeste('e2e-prio-linha-val2');
 
       const resRepLinha = await request(app.getHttpServer())
-        .post('/reportes')
+        .post('/v1/reportes')
         .set('Authorization', `Bearer ${tokenLinhaAutor}`)
         .send({
           tipo: TipoReporte.LINHA,
@@ -1111,7 +1111,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       for (const token of [tokenLinhaVal1, tokenLinhaVal2]) {
         await request(app.getHttpServer())
-          .post(`/reportes/${repLinha.id}/confirmacoes`)
+          .post(`/v1/reportes/${repLinha.id}/confirmacoes`)
           .set('Authorization', `Bearer ${token}`)
           .send({
             tipo: TipoConfirmacao.CONFIRMAR,
@@ -1121,7 +1121,7 @@ describe('Sinaleiro API (E2E)', () => {
 
       // Regra 5.2 — Reporte explícito de LINHA tem prioridade sobre estações PARALISADAS
       const resComPrioridade = await request(app.getHttpServer())
-        .get(`/linhas/${linhaId}/status`)
+        .get(`/v1/linhas/${linhaId}/status`)
         .expect(200);
       expect(resComPrioridade.body).toMatchObject({
         status: StatusLinha.ATENCAO,
@@ -1135,7 +1135,7 @@ describe('Sinaleiro API (E2E)', () => {
       await app.get(CacheService).clear();
 
       const resAposExpirarLinha = await request(app.getHttpServer())
-        .get(`/linhas/${linhaId}/status`)
+        .get(`/v1/linhas/${linhaId}/status`)
         .expect(200);
       expect(resAposExpirarLinha.body).toMatchObject({
         status: StatusLinha.PARALISADA,
