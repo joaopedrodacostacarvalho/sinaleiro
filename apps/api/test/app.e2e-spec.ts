@@ -1044,4 +1044,103 @@ describe('Sinaleiro API (E2E)', () => {
       ).toBe(false);
     });
   });
+
+  describe('Prioridade de reporte explícito de LINHA sobre derivação das estações (Regra 5.2)', () => {
+    it('sobrepõe a derivação das estações enquanto o reporte explícito de LINHA está ativo e retorna à derivação após expirar', async () => {
+      const linhaId = estacaoRecife.linha_id;
+      const estacoesDaLinha = [estacaoRecife, estacaoJoanaBezerra];
+
+      // 1. Cria e confirma 2 estações PARALISADAS para forçar derivação PARALISADA na linha
+      for (let i = 0; i < estacoesDaLinha.length; i++) {
+        const estacao = estacoesDaLinha[i];
+        const tokenAutor = criarTokenTeste(`e2e-prio-est-autor-${i}`);
+        const tokenVal1 = criarTokenTeste(`e2e-prio-est-val1-${i}`);
+        const tokenVal2 = criarTokenTeste(`e2e-prio-est-val2-${i}`);
+
+        const resRep = await request(app.getHttpServer())
+          .post('/reportes')
+          .set('Authorization', `Bearer ${tokenAutor}`)
+          .send({
+            tipo: TipoReporte.ESTACAO,
+            estacao_id: estacao.id,
+            status_estacao: StatusEstacao.PARALISADA,
+            latitude: Number(estacao.latitude),
+            longitude: Number(estacao.longitude),
+          })
+          .expect(201);
+
+        const rep = resRep.body as { id: string };
+
+        for (const token of [tokenVal1, tokenVal2]) {
+          await request(app.getHttpServer())
+            .post(`/reportes/${rep.id}/confirmacoes`)
+            .set('Authorization', `Bearer ${token}`)
+            .send({
+              tipo: TipoConfirmacao.CONFIRMAR,
+              latitude: Number(estacao.latitude),
+              longitude: Number(estacao.longitude),
+            })
+            .expect(201);
+        }
+      }
+
+      const resDerivadoAntes = await request(app.getHttpServer())
+        .get(`/linhas/${linhaId}/status`)
+        .expect(200);
+      expect(resDerivadoAntes.body).toMatchObject({
+        status: StatusLinha.PARALISADA,
+        confianca: 20,
+      });
+
+      // 2. Cria e confirma reporte explícito de LINHA com status ATENCAO (confiança >= 20)
+      const tokenLinhaAutor = criarTokenTeste('e2e-prio-linha-autor');
+      const tokenLinhaVal1 = criarTokenTeste('e2e-prio-linha-val1');
+      const tokenLinhaVal2 = criarTokenTeste('e2e-prio-linha-val2');
+
+      const resRepLinha = await request(app.getHttpServer())
+        .post('/reportes')
+        .set('Authorization', `Bearer ${tokenLinhaAutor}`)
+        .send({
+          tipo: TipoReporte.LINHA,
+          linha_id: linhaId,
+          status_linha: StatusLinha.ATENCAO,
+        })
+        .expect(201);
+
+      const repLinha = resRepLinha.body as { id: string };
+
+      for (const token of [tokenLinhaVal1, tokenLinhaVal2]) {
+        await request(app.getHttpServer())
+          .post(`/reportes/${repLinha.id}/confirmacoes`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({
+            tipo: TipoConfirmacao.CONFIRMAR,
+          })
+          .expect(201);
+      }
+
+      // Regra 5.2 — Reporte explícito de LINHA tem prioridade sobre estações PARALISADAS
+      const resComPrioridade = await request(app.getHttpServer())
+        .get(`/linhas/${linhaId}/status`)
+        .expect(200);
+      expect(resComPrioridade.body).toMatchObject({
+        status: StatusLinha.ATENCAO,
+        confianca: 20,
+      });
+
+      // 3. Ao expirar o reporte explícito de LINHA, a linha volta à derivação das estações
+      await dataSource.getRepository(Reporte).update(repLinha.id, {
+        data_hora_expiracao: new Date(Date.now() - 1_000),
+      });
+      await app.get(CacheService).clear();
+
+      const resAposExpirarLinha = await request(app.getHttpServer())
+        .get(`/linhas/${linhaId}/status`)
+        .expect(200);
+      expect(resAposExpirarLinha.body).toMatchObject({
+        status: StatusLinha.PARALISADA,
+        confianca: 20,
+      });
+    });
+  });
 });
