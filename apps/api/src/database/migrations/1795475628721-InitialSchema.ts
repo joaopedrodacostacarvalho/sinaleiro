@@ -4,6 +4,7 @@ export class InitialSchema1795475628721 implements MigrationInterface {
   name = 'InitialSchema1795475628721'
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
     await queryRunner.query(`CREATE TYPE "public"."linha_sentido_sentido_enum" AS ENUM('RECIFE', 'CAMARAGIBE', 'JABOATAO', 'CAJUEIRO_SECO', 'CABO', 'SOTAVE')`);
     await queryRunner.query(`CREATE TABLE "linha_sentido" ("linha_id" integer NOT NULL, "sentido" "public"."linha_sentido_sentido_enum" NOT NULL, CONSTRAINT "PK_7485cab0c4c2a79ee86081bc5cd" PRIMARY KEY ("linha_id", "sentido"))`);
     await queryRunner.query(`CREATE TYPE "public"."confirmacao_reporte_tipo_enum" AS ENUM('CONFIRMAR', 'DISCORDAR')`);

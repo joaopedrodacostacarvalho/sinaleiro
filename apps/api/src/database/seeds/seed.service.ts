@@ -18,8 +18,13 @@ export class SeedService implements OnApplicationBootstrap {
   ) { }
 
   async onApplicationBootstrap(): Promise<void> {
-    // Evita rodar automaticamente em ambiente de testes automatizados
-    if (process.env.NODE_ENV === 'test') return;
+    if (
+      process.env.NODE_ENV === 'production' ||
+      process.env.NODE_ENV === 'test' ||
+      process.env.TYPEORM_MIGRATIONS_RUN === 'true'
+    ) {
+      return;
+    }
 
     await this.runMetrorecSeed();
   }

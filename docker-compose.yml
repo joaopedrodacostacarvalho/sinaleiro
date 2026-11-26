@@ -39,8 +39,32 @@ services:
               npm run start:dev --workspace=apps/api"
       environment:
         - NODE_ENV=development
-      env_file:
+      env_file: 
         - path: .env
           required: false
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: sinaleiro_web_dev
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    depends_on:
+      - api
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/web/node_modules
+      - /app/packages/types/dist
+    command: >
+      sh -c "npm run build --workspace=@sinaleiro/types &&
+            npm run dev --workspace=@sinaleiro/web"
+    environment:
+      - NODE_ENV=development
+    env_file:
+      - path: .env
+        required: false
+
 volumes:
   postgres_data:

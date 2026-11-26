@@ -16,16 +16,26 @@ const migrationExt = import.meta.url.endsWith('.ts') ? '.ts' : '.js';
     TypeOrmModule.forRootAsync({
       useFactory: () => {
         const isProd = process.env.NODE_ENV === 'production';
-
-        const synchronize =
-          process.env.TYPEORM_SYNCHRONIZE != null
-            ? process.env.TYPEORM_SYNCHRONIZE === 'true'
-            : !isProd;
+        const isTest =
+          process.env.NODE_ENV === 'test' ||
+          Boolean(process.env.VITEST) ||
+          Boolean(process.env.E2E_DB_NAME);
 
         const migrationsRun =
           process.env.TYPEORM_MIGRATIONS_RUN != null
             ? process.env.TYPEORM_MIGRATIONS_RUN === 'true'
-            : isProd;
+            : isProd || isTest;
+
+        const synchronize =
+          isProd || migrationsRun
+            ? false
+            : process.env.TYPEORM_SYNCHRONIZE != null
+              ? process.env.TYPEORM_SYNCHRONIZE === 'true'
+              : true;
+
+        const database = isTest
+          ? (process.env.E2E_DB_NAME || 'sinaleiro_test')
+          : (process.env.DB_NAME || 'sinaleiro');
 
         return {
           type: 'postgres',
@@ -33,10 +43,10 @@ const migrationExt = import.meta.url.endsWith('.ts') ? '.ts' : '.js';
           port: Number(process.env.DB_PORT ?? 5432),
           username: process.env.DB_USER ?? 'postgres',
           password: process.env.DB_PASSWORD ?? 'postgres',
-          database: process.env.DB_NAME ?? 'sinaleiro',
+          database,
           autoLoadEntities: true,
           migrations: [join(__dirname, 'migrations', `*${migrationExt}`)],
-          retryAttempts: process.env.NODE_ENV === 'test' ? 1 : 10,
+          retryAttempts: isTest ? 0 : 10,
           synchronize,
           migrationsRun,
         };
