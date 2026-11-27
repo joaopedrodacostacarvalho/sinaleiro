@@ -52,6 +52,7 @@ const CATALOGO_METROREC: LinhaCatalogo[] = [
     cor: '#0054A6',
     sentidos: ['RECIFE', 'CAJUEIRO_SECO'],
     estacoes: [
+      { nome: 'Largo da Paz', latitude: -8.08139, longitude: -34.90472 },
       { nome: 'Imbiribeira', latitude: -8.093056, longitude: -34.906111 },
       { nome: 'Antônio Falcão', latitude: -8.107222, longitude: -34.910278 },
       { nome: 'Shopping', latitude: -8.118056, longitude: -34.913056 },

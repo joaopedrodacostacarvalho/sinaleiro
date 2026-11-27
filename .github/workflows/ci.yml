@@ -88,3 +88,40 @@ jobs:
 
       - name: Executar Testes E2E (Vitest + Supertest)
         run: npm run test:e2e --workspace=apps/api
+
+  validar-web:
+    name: Build, Typecheck e Lint (Web)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Compilar tipos compartilhados (@sinaleiro/types)
+        run: npm run build --workspace=@sinaleiro/types --if-present
+
+      - name: Executar Lint (@sinaleiro/web)
+        run: npm run lint --workspace=@sinaleiro/web --if-present
+
+      - name: Verificar tipos TypeScript (@sinaleiro/web)
+        run: npx tsc --noEmit -p apps/web/tsconfig.app.json
+
+      - name: Compilar SPA (Vite)
+        env:
+          VITE_API_URL: http://localhost:3000/v1
+          VITE_FIREBASE_API_KEY: ci-dummy-key
+          VITE_FIREBASE_AUTH_DOMAIN: ci-dummy.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: ci-dummy
+          VITE_FIREBASE_STORAGE_BUCKET: ci-dummy.appspot.com
+          VITE_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
+          VITE_FIREBASE_APP_ID: 1:000000000000:web:000000000000
+        run: npm run build --workspace=@sinaleiro/web

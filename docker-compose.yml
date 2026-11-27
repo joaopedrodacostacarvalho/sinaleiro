@@ -18,30 +18,40 @@ services:
       retries: 5
 
   api:
-      build:
-        context: .
-        dockerfile: apps/api/Dockerfile
-        target: development
-      container_name: backend_api_dev
-      ports:
-        - "${PORT:-3000}:3000"
-      depends_on:
-        db:
-          condition: service_healthy
-      volumes:
-        - .:/app
-        - /app/node_modules
-        - /app/apps/api/node_modules
-        - /app/packages/types/dist 
-      command: >
-        sh -c "npm run build --workspace=@sinaleiro/types &&
-              npm run dev --workspace=@sinaleiro/types &
-              npm run start:dev --workspace=apps/api"
-      environment:
-        - NODE_ENV=development
-      env_file: 
-        - path: .env
-          required: false
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: development
+    container_name: backend_api_dev
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/apps/api/node_modules
+      - types_dist:/app/packages/types/dist
+    command: >
+      sh -c "npm run build --workspace=@sinaleiro/types &&
+             (npm run migration:run --workspace=apps/api || true) &&
+             (npm run dev --workspace=@sinaleiro/types &) &&
+             npm run start:dev --workspace=apps/api"
+    environment:
+      - NODE_ENV=development
+      - DB_HOST=db
+    env_file:
+      - path: .env
+        required: false
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/v1/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
   web:
     build:
       context: .
@@ -51,15 +61,15 @@ services:
     ports:
       - "${WEB_PORT:-5173}:5173"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     volumes:
       - .:/app
       - /app/node_modules
       - /app/apps/web/node_modules
-      - /app/packages/types/dist
+      - types_dist:/app/packages/types/dist
     command: >
-      sh -c "npm run build --workspace=@sinaleiro/types &&
-            npm run dev --workspace=@sinaleiro/web"
+      sh -c "npm run dev --workspace=@sinaleiro/web -- --host 0.0.0.0"
     environment:
       - NODE_ENV=development
     env_file:
@@ -68,3 +78,4 @@ services:
 
 volumes:
   postgres_data:
+  types_dist:
