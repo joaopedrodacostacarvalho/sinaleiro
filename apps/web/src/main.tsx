@@ -1,0 +1,21 @@
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import './index.css'
+import App from './App.tsx'
+import { ThemeProvider } from '@mui/material/styles'
+import { theme } from './theme.ts'
+import { CssBaseline } from '@mui/material'
+import { AuthProvider } from './auth/AuthContext.tsx'
+import 'leaflet/dist/leaflet.css';
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <ThemeProvider theme={theme}>
+      <CssBaseline>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </CssBaseline>
+    </ThemeProvider>
+  </StrictMode>,
+)
