@@ -38,4 +38,26 @@ export function validarAmbienteProducao(
       'TYPEORM_SYNCHRONIZE=true não é permitido quando NODE_ENV=production',
     );
   }
+
+  const origens = (env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map((origem) => origem.trim())
+    .filter(Boolean);
+
+  if (origens.includes('*')) {
+    throw new Error(
+      'CORS_ORIGINS não pode conter wildcard ("*") quando NODE_ENV=production',
+    );
+  }
+
+  const privateKeyNormalizada = (env.FIREBASE_PRIVATE_KEY ?? '').replace(
+    /\\n/g,
+    '\n',
+  );
+
+  if (!privateKeyNormalizada.includes('BEGIN PRIVATE KEY')) {
+    throw new Error(
+      'FIREBASE_PRIVATE_KEY inválido em produção: cabeçalho PEM não encontrado',
+    );
+  }
 }

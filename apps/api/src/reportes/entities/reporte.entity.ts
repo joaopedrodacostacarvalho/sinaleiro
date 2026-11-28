@@ -22,6 +22,15 @@ import { Estacao } from '../../estacoes/entities/estacao.entity.js';
 import { Linha } from '../../linhas/entities/linha.entity.js';
 
 @Index('idx_reporte_expiracao', ['data_hora_expiracao'], { where: '"ativo" = TRUE' })
+@Index('idx_reporte_ativo_estacao', ['estacao_id', 'data_hora_criacao'], {
+  where: '"ativo" = TRUE AND "estacao_id" IS NOT NULL',
+})
+@Index('idx_reporte_ativo_linha', ['linha_id', 'data_hora_criacao'], {
+  where: '"ativo" = TRUE AND "linha_id" IS NOT NULL',
+})
+@Index('idx_reporte_ativo_trem', ['trem_id', 'data_hora_criacao'], {
+  where: '"ativo" = TRUE AND "trem_id" IS NOT NULL',
+})
 @Entity('reporte')
 @Check(
   'reporte_alvo_unico',
@@ -69,10 +78,10 @@ export class Reporte {
   @Column({ type: 'enum', enum: StatusTrem, nullable: true })
   status_trem: StatusTrem | null;
 
-  @Column({ type: 'timestamp' })
+  @Column({ type: 'timestamptz' })
   data_hora_criacao: Date;
 
-  @Column({ type: 'timestamp' })
+  @Column({ type: 'timestamptz' })
   data_hora_expiracao: Date;
 
   @Column({ type: 'integer', default: 0 })

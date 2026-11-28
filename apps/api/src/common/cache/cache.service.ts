@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 
 interface Entrada {
   valor: unknown;
@@ -8,13 +8,17 @@ interface Entrada {
 type CacheStore = Map<string, Entrada>;
 
 const storesAtivos = new Set<CacheStore>();
+const INTERVALO_LIMPEZA_MS = 60_000;
 
 @Injectable()
-export class CacheService {
+export class CacheService implements OnModuleDestroy {
   private store: CacheStore = new Map<string, Entrada>();
+  private readonly cleanupTimer: NodeJS.Timeout;
 
   constructor() {
     storesAtivos.add(this.store);
+    this.cleanupTimer = setInterval(() => this.expurgarExpirados(), INTERVALO_LIMPEZA_MS);
+    this.cleanupTimer.unref();
   }
 
   async get<T = unknown>(chave: string): Promise<T | null> {
@@ -38,6 +42,21 @@ export class CacheService {
   async clear(): Promise<void> {
     for (const store of storesAtivos) {
       store.clear();
+    }
+  }
+
+  onModuleDestroy(): void {
+    clearInterval(this.cleanupTimer);
+    this.store.clear();
+    storesAtivos.delete(this.store);
+  }
+
+  private expurgarExpirados(): void {
+    const agora = Date.now();
+    for (const [chave, entrada] of this.store.entries()) {
+      if (entrada.expiraEm <= agora) {
+        this.store.delete(chave);
+      }
     }
   }
 }

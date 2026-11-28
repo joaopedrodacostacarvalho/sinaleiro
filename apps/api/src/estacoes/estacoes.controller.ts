@@ -1,40 +1,20 @@
 import {
-  Body,
   Controller,
   DefaultValuePipe,
-  Delete,
   Get,
   Param,
   ParseFloatPipe,
   ParseIntPipe,
-  Patch,
-  Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 
 import { EstacoesService } from './estacoes.service.js';
-import { CreateEstacaoDto } from './dto/create-estacao.dto.js';
-import { UpdateEstacaoDto } from './dto/update-estacao.dto.js';
-import { FirebaseAuthGuard } from '../auth/firebase-auth/firebase-auth.guard.js';
 
 @ApiTags('estacoes')
 @Controller('estacoes')
 export class EstacoesController {
   constructor(private readonly estacoesService: EstacoesService) { }
-
-  @Post()
-  @UseGuards(FirebaseAuthGuard)
-  @ApiBearerAuth('firebase-auth')
-  create(@Body() createEstacaoDto: CreateEstacaoDto) {
-    return this.estacoesService.create(createEstacaoDto);
-  }
 
   @Get('proximas')
   @ApiOperation({ summary: 'Retorna as N estações mais próximas via Haversine' })
@@ -57,22 +37,5 @@ export class EstacoesController {
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.estacoesService.findOne(id);
-  }
-
-  @Patch(':id')
-  @UseGuards(FirebaseAuthGuard)
-  @ApiBearerAuth('firebase-auth')
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() updateEstacaoDto: UpdateEstacaoDto,
-  ) {
-    return this.estacoesService.update(id, updateEstacaoDto);
-  }
-
-  @Delete(':id')
-  @UseGuards(FirebaseAuthGuard)
-  @ApiBearerAuth('firebase-auth')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.estacoesService.remove(id);
   }
 }

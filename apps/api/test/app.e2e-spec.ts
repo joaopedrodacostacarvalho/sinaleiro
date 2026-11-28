@@ -1143,4 +1143,135 @@ describe('Sinaleiro API (E2E)', () => {
       });
     });
   });
+  describe('Autorização de Rotas e Autoria de Reportes (MVP)', () => {
+    const TREM_UUID_INEXISTENTE = '00000000-0000-4000-8000-000000000001';
+
+    it('retorna 404 para POST, PATCH e DELETE em /v1/linhas, /v1/estacoes e /v1/trens mesmo autenticado', async () => {
+      const token = criarTokenTeste('uid-e2e-rota-bloqueada');
+      const authHeader = { Authorization: `Bearer ${token}` };
+
+      // /v1/linhas — somente leitura
+      await request(app.getHttpServer())
+        .post('/v1/linhas')
+        .set(authHeader)
+        .send({ nome: 'Linha Fantasma', cor: '#000000' })
+        .expect(404);
+
+      await request(app.getHttpServer())
+        .patch('/v1/linhas/1')
+        .set(authHeader)
+        .send({ nome: 'Linha Alterada' })
+        .expect(404);
+
+      await request(app.getHttpServer())
+        .delete('/v1/linhas/1')
+        .set(authHeader)
+        .expect(404);
+
+      // /v1/estacoes — somente leitura
+      await request(app.getHttpServer())
+        .post('/v1/estacoes')
+        .set(authHeader)
+        .send({
+          nome: 'Estação Fantasma',
+          linha_id: 1,
+          latitude: -8.0677,
+          longitude: -34.8851,
+        })
+        .expect(404);
+
+      await request(app.getHttpServer())
+        .patch('/v1/estacoes/1')
+        .set(authHeader)
+        .send({ nome: 'Estação Alterada' })
+        .expect(404);
+
+      await request(app.getHttpServer())
+        .delete('/v1/estacoes/1')
+        .set(authHeader)
+        .expect(404);
+
+      // /v1/trens — somente leitura (criação ocorre apenas via POST /v1/reportes)
+      await request(app.getHttpServer())
+        .post('/v1/trens')
+        .set(authHeader)
+        .send({
+          linha_id: 1,
+          sentido: Sentido.RECIFE,
+          id_vagao: 'TUE-999',
+        })
+        .expect(404);
+
+      await request(app.getHttpServer())
+        .patch(`/v1/trens/${TREM_UUID_INEXISTENTE}`)
+        .set(authHeader)
+        .send({ id_vagao: 'TUE-000' })
+        .expect(404);
+
+      await request(app.getHttpServer())
+        .delete(`/v1/trens/${TREM_UUID_INEXISTENTE}`)
+        .set(authHeader)
+        .expect(404);
+    });
+
+    it('bloqueia PATCH e DELETE em /v1/reportes/:id com 403 para outro usuário, rejeita mass assignment e permite ao autor', async () => {
+      const tokenAutor = criarTokenTeste('uid-e2e-autor-reporte');
+      const tokenTerceiro = criarTokenTeste('uid-e2e-terceiro-reporte');
+
+      // 1. Autor cria um reporte de estação
+      const criadoRes = await request(app.getHttpServer())
+        .post('/v1/reportes')
+        .set('Authorization', `Bearer ${tokenAutor}`)
+        .send({
+          tipo: TipoReporte.ESTACAO,
+          estacao_id: 1,
+          status_estacao: StatusEstacao.ATENCAO,
+        })
+        .expect(201);
+
+      const reporteId = (criadoRes.body as { id: string }).id;
+      expect(reporteId).toBeDefined();
+
+      // 2. Outro usuário tenta editar -> 403 Forbidden
+      await request(app.getHttpServer())
+        .patch(`/v1/reportes/${reporteId}`)
+        .set('Authorization', `Bearer ${tokenTerceiro}`)
+        .send({ status_estacao: StatusEstacao.NORMAL })
+        .expect(403);
+
+      // 3. Outro usuário tenta excluir -> 403 Forbidden
+      await request(app.getHttpServer())
+        .delete(`/v1/reportes/${reporteId}`)
+        .set('Authorization', `Bearer ${tokenTerceiro}`)
+        .expect(403);
+
+      // 4. Autor tenta enviar campo não permitido (mass assignment) -> 400 Bad Request
+      await request(app.getHttpServer())
+        .patch(`/v1/reportes/${reporteId}`)
+        .set('Authorization', `Bearer ${tokenAutor}`)
+        .send({ status_estacao: StatusEstacao.LOTADA, confianca: 100 })
+        .expect(400);
+
+      // 5. Autor atualiza legitimamente o status do próprio reporte -> 200 OK
+      const atualizadoRes = await request(app.getHttpServer())
+        .patch(`/v1/reportes/${reporteId}`)
+        .set('Authorization', `Bearer ${tokenAutor}`)
+        .send({ status_estacao: StatusEstacao.LOTADA })
+        .expect(200);
+
+      expect(
+        (atualizadoRes.body as { status_estacao: StatusEstacao }).status_estacao,
+      ).toBe(StatusEstacao.LOTADA);
+
+      // 6. Autor exclui o próprio reporte -> 200 OK e GET subsequente retorna 404
+      await request(app.getHttpServer())
+        .delete(`/v1/reportes/${reporteId}`)
+        .set('Authorization', `Bearer ${tokenAutor}`)
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .get(`/v1/reportes/${reporteId}`)
+        .expect(404);
+    });
+  });
 });

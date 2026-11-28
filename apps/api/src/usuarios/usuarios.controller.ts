@@ -5,6 +5,7 @@ import {
   Delete,
   Body,
   Param,
+  ParseUUIDPipe,
   HttpCode,
   HttpStatus,
   UseGuards,
@@ -19,22 +20,15 @@ import { UpdateMeDto } from './dto/update-me.dto.js';
 @ApiTags('usuarios')
 @ApiBearerAuth('firebase-auth')
 @Controller('usuarios')
-@UseGuards(FirebaseAuthGuard)   // guard no controller cobre todas as rotas
+@UseGuards(FirebaseAuthGuard)
 export class UsuariosController {
   constructor(private readonly usuariosService: UsuariosService) { }
 
-  /**
-   * Retorna o usuário autenticado. Evita round-trip ao banco:
-   * o FirebaseAuthGuard já anexou a entidade em `request.user`.
-   */
   @Get('me')
   getMe(@CurrentUser() usuario: Usuario): Usuario {
     return usuario;
   }
 
-  /**
-   * Atualiza o próprio perfil. O `id` vem do token, nunca do body ou da URL.
-   */
   @Patch('me')
   updateMe(
     @CurrentUser('id') id: string,
@@ -43,20 +37,20 @@ export class UsuariosController {
     return this.usuariosService.updateMe(id, updateMeDto);
   }
 
-  /**
-   * Exclusão de conta (LGPD). Retorna 204 sem corpo.
-   */
   @Delete('me')
   @HttpCode(HttpStatus.NO_CONTENT)
   async removeMe(@CurrentUser('id') id: string): Promise<void> {
     await this.usuariosService.remove(id);
   }
 
-  /**
-   * Consulta pública por ID (mantida). Não permite alteração.
-   */
   @Get(':id')
-  findOne(@Param('id') id: string): Promise<Usuario> {
-    return this.usuariosService.findOne(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string) {
+    const usuario = await this.usuariosService.findOne(id);
+    return {
+      id: usuario.id,
+      nome: usuario.nome,
+      reputacao: usuario.reputacao,
+      data_cadastro: usuario.data_cadastro,
+    };
   }
 }
