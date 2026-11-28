@@ -1,63 +1,100 @@
+name: sinaleiro-prod
+
 services:
   db:
     image: postgres:17-alpine
     container_name: sinaleiro_db_prod
-    restart: always
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DB_USER:?DB_USER é obrigatório em produção}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD é obrigatório em produção}
-      POSTGRES_DB: ${DB_NAME:?DB_NAME é obrigatório em produção}
+      POSTGRES_USER: ${DB_USER:-sinaleiro}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD em .env.production}
+      POSTGRES_DB: ${DB_NAME:-sinaleiro}
     volumes:
-      - postgres_data_prod:/var/lib/postgresql/data
+      - postgres_prod_data:/var/lib/postgresql/data
+    networks:
+      - sinaleiro_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-sinaleiro} -d ${DB_NAME:-sinaleiro}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-    networks:
-      - sinaleiro_internal
 
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
       target: production
-    container_name: sinaleiro_api_prod
-    restart: always
+    restart: unless-stopped
+    deploy:
+      replicas: 1
     ports:
-      - "127.0.0.1:${PORT:-3000}:3000"
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_USER: ${DB_USER:?DB_USER é obrigatório em produção}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD é obrigatório em produção}
-      DB_NAME: ${DB_NAME:?DB_NAME é obrigatório em produção}
-      TYPEORM_SYNCHRONIZE: "false"
-      TYPEORM_MIGRATIONS_RUN: "true"
-      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS é obrigatório em produção}
-      ENABLE_SWAGGER: ${ENABLE_SWAGGER:-false}
-      THROTTLE_TTL_MS: ${THROTTLE_TTL_MS:-60000}
-      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-60}
-      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID é obrigatório}
-      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:?FIREBASE_CLIENT_EMAIL é obrigatório}
-      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:?FIREBASE_PRIVATE_KEY é obrigatório}
+      - "127.0.0.1:${API_PORT:-3000}:3000"
     read_only: true
     tmpfs:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env.production
+        required: false
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-sinaleiro}
+      DB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD em .env.production}
+      DB_NAME: ${DB_NAME:-sinaleiro}
+      TYPEORM_SYNCHRONIZE: "false"
+      TYPEORM_MIGRATIONS_RUN: "true"
+      CORS_ORIGINS: ${CORS_ORIGINS:?Defina CORS_ORIGINS em .env.production}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?Defina FIREBASE_PROJECT_ID em .env.production}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:?Defina FIREBASE_CLIENT_EMAIL em .env.production}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:?Defina FIREBASE_PRIVATE_KEY em .env.production}
+      ENABLE_SWAGGER: ${ENABLE_SWAGGER:-false}
     networks:
-      - sinaleiro_internal
+      - sinaleiro_net
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/v1/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
-networks:
-  sinaleiro_internal:
-    driver: bridge
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: production
+      secrets:
+        - web_env
+    container_name: sinaleiro_web_prod
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - sinaleiro_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+secrets:
+  web_env:
+    file: ./.env.production
 
 volumes:
-  postgres_data_prod:
+  postgres_prod_data:
+
+networks:
+  sinaleiro_net:
+    driver: bridge
