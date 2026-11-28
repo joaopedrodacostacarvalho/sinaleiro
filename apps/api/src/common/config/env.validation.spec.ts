@@ -12,7 +12,8 @@ describe('validarAmbienteProducao', () => {
     CORS_ORIGINS: 'https://sinaleiro.app',
     FIREBASE_PROJECT_ID: 'sinaleiro-prod',
     FIREBASE_CLIENT_EMAIL: 'firebase@sinaleiro-prod.iam.gserviceaccount.com',
-    FIREBASE_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\nABC\n-----END PRIVATE KEY-----',
+    FIREBASE_PRIVATE_KEY:
+      '-----BEGIN PRIVATE KEY-----\nABC\n-----END PRIVATE KEY-----',
   };
 
   it('não lança erro fora de produção mesmo sem variáveis', () => {
@@ -42,5 +43,23 @@ describe('validarAmbienteProducao', () => {
         TYPEORM_SYNCHRONIZE: 'true',
       }),
     ).toThrow(/TYPEORM_SYNCHRONIZE=true/);
+  });
+
+  it('bloqueia wildcard "*" em CORS_ORIGINS quando NODE_ENV=production', () => {
+    expect(() =>
+      validarAmbienteProducao({
+        ...envCompleto,
+        CORS_ORIGINS: 'https://sinaleiro.app, *',
+      }),
+    ).toThrow(/CORS_ORIGINS/);
+  });
+
+  it('rejeita FIREBASE_PRIVATE_KEY sem cabeçalho PEM em produção', () => {
+    expect(() =>
+      validarAmbienteProducao({
+        ...envCompleto,
+        FIREBASE_PRIVATE_KEY: 'chave-invalida',
+      }),
+    ).toThrow(/FIREBASE_PRIVATE_KEY/);
   });
 });

@@ -36,6 +36,7 @@ type CacheTremEntrada = StatusTremResultado | { vazio: true };
 const TTL_STATUS_MS = 30_000;
 const LIMIAR_SOMA_MINIMA = 15; // equivalente a 1.5 na escala de pesos (×10)
 const MIN_CONFIANCA_DERIVACAO_LINHA = 20;
+const MIN_CONFIANCA_TREM = 10;
 const JANELA_TREM_ATIVO_MS = 20 * 60_000;
 
 const GRAVIDADE_ESTACAO: Record<StatusEstacao, number> = {
@@ -150,6 +151,195 @@ export class StatusService {
         r.status_estacao != null,
     );
 
+    const resultado = this.derivarStatusLinhaDeEstacoes(ativosEstacoes);
+    await this.cache.set(cacheKey, resultado, TTL_STATUS_MS);
+    return resultado;
+  }
+
+  async getStatusTrem(tremId: string): Promise<StatusTremResultado | null> {
+    const cacheKey = `status:trem:${tremId}`;
+    const cached = await this.cache.get<CacheTremEntrada>(cacheKey);
+    if (cached !== null) {
+      return 'vazio' in cached ? null : cached;
+    }
+
+    const agora = new Date();
+    const reportes = await this.reporteRepo.find({
+      where: {
+        tipo: TipoReporte.TREM,
+        trem_id: tremId,
+        ativo: true,
+        data_hora_expiracao: MoreThan(agora),
+      },
+      order: { data_hora_criacao: 'DESC' },
+      take: 3,
+    });
+
+    const resultado = this.agregarStatusTrem(this.filtrarAtivos(reportes, agora));
+
+    if (!resultado) {
+      await this.cache.set(cacheKey, { vazio: true }, TTL_STATUS_MS);
+      return null;
+    }
+
+    await this.cache.set(cacheKey, resultado, TTL_STATUS_MS);
+    return resultado;
+  }
+
+  async getMapa() {
+    const cacheKey = 'mapa:geral';
+    const cached = await this.cache.get(cacheKey);
+    if (cached) return cached;
+
+    const agora = new Date();
+    const [estacoes, linhas, trens, reportesAtivos] = await Promise.all([
+      this.estacaoRepo.find(),
+      this.linhaRepo ? this.linhaRepo.find() : Promise.resolve([]),
+      this.tremRepo ? this.tremRepo.find() : Promise.resolve([]),
+      this.reporteRepo.find({
+        where: {
+          ativo: true,
+          data_hora_expiracao: MoreThan(agora),
+        },
+        order: { data_hora_criacao: 'DESC' },
+      }),
+    ]);
+
+    const ativos = this.filtrarAtivos(reportesAtivos, agora);
+
+    const porEstacao = new Map<
+      number,
+      Array<Reporte & { status_estacao: StatusEstacao }>
+    >();
+    const porLinha = new Map<
+      number,
+      Array<Reporte & { status_linha: StatusLinha }>
+    >();
+    const porTrem = new Map<string, Reporte[]>();
+
+    for (const r of ativos) {
+      if (
+        r.tipo === TipoReporte.ESTACAO &&
+        r.estacao_id != null &&
+        r.status_estacao != null
+      ) {
+        const lista = porEstacao.get(r.estacao_id) ?? [];
+        lista.push(r as Reporte & { status_estacao: StatusEstacao });
+        porEstacao.set(r.estacao_id, lista);
+      } else if (
+        r.tipo === TipoReporte.LINHA &&
+        r.linha_id != null &&
+        r.status_linha != null
+      ) {
+        const lista = porLinha.get(r.linha_id) ?? [];
+        lista.push(r as Reporte & { status_linha: StatusLinha });
+        porLinha.set(r.linha_id, lista);
+      } else if (r.tipo === TipoReporte.TREM && r.trem_id != null) {
+        const lista = porTrem.get(r.trem_id) ?? [];
+        lista.push(r);
+        porTrem.set(r.trem_id, lista);
+      }
+    }
+
+    const estacoesComStatus = estacoes.map((estacao) =>
+      Object.assign({}, estacao, {
+        status_efetivo: this.agregarStatusEstacao(
+          porEstacao.get(estacao.id) ?? [],
+        ),
+      }),
+    );
+
+    const linhasComStatus = linhas.map((linha) => {
+      const explicitos = porLinha.get(linha.id) ?? [];
+      if (explicitos.length > 0) {
+        return Object.assign({}, linha, {
+          status_efetivo: this.agregarStatusLinha(explicitos),
+        });
+      }
+
+      const estacoesDaLinha = estacoes
+        .filter((e) => e.linha_id === linha.id)
+        .flatMap((e) => porEstacao.get(e.id) ?? []);
+
+      return Object.assign({}, linha, {
+        status_efetivo: this.derivarStatusLinhaDeEstacoes(estacoesDaLinha),
+      });
+    });
+
+    // Regra 7.2.1 — Trem sem reportes há > 20 minutos é considerado inativo no mapa
+    const limiteInatividade = new Date(agora.getTime() - JANELA_TREM_ATIVO_MS);
+    const trensAtivos = trens
+      .map((trem) => {
+        const statusTrem = this.agregarStatusTrem(porTrem.get(trem.id) ?? []);
+        if (
+          !statusTrem ||
+          new Date(statusTrem.atualizado_em) <= limiteInatividade
+        ) {
+          return null;
+        }
+        return Object.assign({}, trem, {
+          status_efetivo: statusTrem,
+        });
+      })
+      .filter((t) => t !== null);
+
+    const payload = {
+      atualizado_em: agora,
+      linhas: linhasComStatus,
+      estacoes: estacoesComStatus,
+      trens: trensAtivos,
+    };
+
+    await this.cache.set(cacheKey, payload, TTL_STATUS_MS);
+    return payload;
+  }
+
+  async invalidarAlvo(alvo: {
+    tipo?: TipoReporte;
+    estacao_id?: number | null;
+    linha_id?: number | null;
+    trem_id?: string | null;
+  }): Promise<void> {
+    await this.cache.del('mapa:geral');
+
+    if (alvo.tipo === TipoReporte.TREM) {
+      if (alvo.trem_id != null) {
+        await this.cache.del(`status:trem:${alvo.trem_id}`);
+      }
+      return;
+    }
+
+    if (alvo.estacao_id != null) {
+      await this.cache.del(`status:estacao:${alvo.estacao_id}`);
+      const estacao = await this.estacaoRepo.findOne({
+        where: { id: alvo.estacao_id },
+      });
+      if (estacao?.linha_id != null) {
+        await this.cache.del(`status:linha:${estacao.linha_id}`);
+      }
+    }
+
+    if (alvo.linha_id != null) {
+      await this.cache.del(`status:linha:${alvo.linha_id}`);
+    }
+
+    if (alvo.trem_id != null) {
+      await this.cache.del(`status:trem:${alvo.trem_id}`);
+    }
+  }
+
+  private filtrarAtivos(reportes: Reporte[], agora: Date): Reporte[] {
+    return reportes.filter(
+      (r) =>
+        r.ativo !== false &&
+        (!r.data_hora_expiracao ||
+          new Date(r.data_hora_expiracao).getTime() > agora.getTime()),
+    );
+  }
+
+  private derivarStatusLinhaDeEstacoes(
+    ativosEstacoes: Array<Reporte & { status_estacao: StatusEstacao }>,
+  ): StatusLinhaResultado {
     const porEstacao = new Map<
       number,
       Array<Reporte & { status_estacao: StatusEstacao }>
@@ -182,54 +372,31 @@ export class StatusService {
         statusEfetivo.status === StatusEstacao.FECHADA ||
         statusEfetivo.status === StatusEstacao.LOTADA
       ) {
-        if (statusEfetivo.status === StatusEstacao.ATENCAO) {
-          qtdAtencao += 1;
-          somaConfiancaCritica += statusEfetivo.confianca;
-          countCritica += 1;
-        }
+        qtdAtencao += 1;
+        somaConfiancaCritica += statusEfetivo.confianca;
+        countCritica += 1;
       }
     }
 
-    let resultado: StatusLinhaResultado;
     if (qtdParalisadas >= 2) {
-      resultado = {
+      return {
         status: StatusLinha.PARALISADA,
         confianca: Math.min(100, Math.round(somaConfiancaCritica / countCritica)),
       };
-    } else if (qtdParalisadas >= 1 || qtdAtencao >= 2) {
-      resultado = {
+    }
+
+    if (qtdParalisadas >= 1 || qtdAtencao >= 2) {
+      return {
         status: StatusLinha.ATENCAO,
         confianca: Math.min(100, Math.round(somaConfiancaCritica / countCritica)),
       };
-    } else {
-      resultado = { status: StatusLinha.NORMAL, confianca: 0 };
     }
 
-    await this.cache.set(cacheKey, resultado, TTL_STATUS_MS);
-    return resultado;
+    return { status: StatusLinha.NORMAL, confianca: 0 };
   }
 
-  async getStatusTrem(tremId: string): Promise<StatusTremResultado | null> {
-    const cacheKey = `status:trem:${tremId}`;
-    const cached = await this.cache.get<CacheTremEntrada>(cacheKey);
-    if (cached !== null) {
-      return 'vazio' in cached ? null : cached;
-    }
-
-    const agora = new Date();
-    const reportes = await this.reporteRepo.find({
-      where: {
-        tipo: TipoReporte.TREM,
-        trem_id: tremId,
-        ativo: true,
-        data_hora_expiracao: MoreThan(agora),
-      },
-      order: { data_hora_criacao: 'DESC' },
-      take: 3,
-    });
-
-    // Regra 5.3 — Apenas os 3 reportes mais recentes; status do mais recente com confianca >= 10
-    const tresMaisRecentes = this.filtrarAtivos(reportes, agora)
+  private agregarStatusTrem(reportes: Reporte[]): StatusTremResultado | null {
+    const tresMaisRecentes = [...reportes]
       .sort(
         (a, b) =>
           new Date(b.data_hora_criacao).getTime() -
@@ -239,115 +406,19 @@ export class StatusService {
 
     const valido = tresMaisRecentes.find(
       (r): r is Reporte & { status_trem: StatusTrem } =>
-        r.status_trem != null && r.confianca >= 10,
+        r.status_trem != null && r.confianca >= MIN_CONFIANCA_TREM,
     );
 
     if (!valido) {
-      await this.cache.set(cacheKey, { vazio: true }, TTL_STATUS_MS);
       return null;
     }
 
-    const resultado: StatusTremResultado = {
+    return {
       status: valido.status_trem,
       confianca: valido.confianca,
       estacao_id: valido.estacao_id,
       atualizado_em: valido.data_hora_criacao,
     };
-
-    await this.cache.set(cacheKey, resultado, TTL_STATUS_MS);
-    return resultado;
-  }
-
-  async getMapa() {
-    const cacheKey = 'mapa:geral';
-    const cached = await this.cache.get(cacheKey);
-    if (cached) return cached;
-
-    const [estacoes, linhas, trens] = await Promise.all([
-      this.estacaoRepo.find(),
-      this.linhaRepo ? this.linhaRepo.find() : Promise.resolve([]),
-      this.tremRepo ? this.tremRepo.find() : Promise.resolve([]),
-    ]);
-
-    const estacoesComStatus = await Promise.all(
-      estacoes.map(async (estacao) =>
-        Object.assign({}, estacao, {
-          status_efetivo: await this.getStatusEstacao(estacao.id),
-        }),
-      ),
-    );
-
-    const linhasComStatus = await Promise.all(
-      linhas.map(async (linha) =>
-        Object.assign({}, linha, {
-          status_efetivo: await this.getStatusLinha(linha.id),
-        }),
-      ),
-    );
-    // Regra 7.2.1 — Trem sem reportes há > 20 minutos é considerado inativo no mapa
-    const limiteInatividade = new Date(Date.now() - JANELA_TREM_ATIVO_MS);
-    const trensAtivos = (
-      await Promise.all(
-        trens.map(async (trem) => {
-          const statusTrem = await this.getStatusTrem(trem.id);
-          if (
-            !statusTrem ||
-            new Date(statusTrem.atualizado_em) <= limiteInatividade
-          ) {
-            return null;
-          }
-          return Object.assign({}, trem, {
-            status_efetivo: statusTrem,
-          });
-        }),
-      )
-    ).filter((t) => t !== null);
-
-    const payload = {
-      atualizado_em: new Date(),
-      linhas: linhasComStatus,
-      estacoes: estacoesComStatus,
-      trens: trensAtivos,
-    };
-
-    await this.cache.set(cacheKey, payload, TTL_STATUS_MS);
-    return payload;
-  }
-
-  async invalidarAlvo(alvo: {
-    tipo?: TipoReporte;
-    estacao_id?: number | null;
-    linha_id?: number | null;
-    trem_id?: string | null;
-  }): Promise<void> {
-    await this.cache.del('mapa:geral');
-
-    if (alvo.estacao_id != null) {
-      await this.cache.del(`status:estacao:${alvo.estacao_id}`);
-      const estacao = await this.estacaoRepo.findOne({
-        where: { id: alvo.estacao_id },
-      });
-      if (estacao?.linha_id != null) {
-        await this.cache.del(`status:linha:${estacao.linha_id}`);
-      }
-    }
-
-    if (alvo.linha_id != null) {
-      await this.cache.del(`status:linha:${alvo.linha_id}`);
-    }
-
-    if (alvo.trem_id != null) {
-      await this.cache.del(`status:trem:${alvo.trem_id}`);
-    }
-  }
-
-  private filtrarAtivos(reportes: Reporte[], agora: Date): Reporte[] {
-    return reportes.filter(
-      (r) =>
-        r.ativo !== false &&
-        (!r.data_hora_expiracao ||
-          new Date(r.data_hora_expiracao).getTime() > agora.getTime()),
-    );
   }
 
   private agregarStatusEstacao(

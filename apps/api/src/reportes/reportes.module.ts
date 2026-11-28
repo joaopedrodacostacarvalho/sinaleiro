@@ -14,6 +14,7 @@ import { Reporte } from './entities/reporte.entity.js';
 import { Estacao } from '../estacoes/entities/estacao.entity.js';
 import { Linha } from '../linhas/entities/linha.entity.js';
 import { Trem } from '../trens/entities/trem.entity.js';
+import { ReportesExpiracaoService } from './reportes-expiracao.service.js';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { Trem } from '../trens/entities/trem.entity.js';
     ConfirmacoesService,
     StatusService,
     CacheService,
+    ReportesExpiracaoService,
   ],
   exports: [ReportesService, ConfirmacoesService, StatusService],
 })

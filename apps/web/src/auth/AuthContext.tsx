@@ -6,27 +6,14 @@ import {
   type User,
 } from 'firebase/auth';
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useState,
   type ReactNode,
 } from 'react';
 import { auth, googleProvider } from './firebase';
 import { syncPerfilPassageiro, type PerfilPassageiro } from '../api/mapa';
-
-interface AuthContextValue {
-  user: User | null;
-  perfil: PerfilPassageiro | null;
-  loading: boolean;
-  signIn: () => Promise<void>;
-  signInWithToken: (customToken: string) => Promise<void>;
-  refreshPerfil: () => Promise<void>;
-  signOutUser: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+import { AuthContext } from './useAuth';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -86,10 +73,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
-  return ctx;
 }

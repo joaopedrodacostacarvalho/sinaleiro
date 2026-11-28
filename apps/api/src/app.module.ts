@@ -13,6 +13,8 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 import { HealthModule } from './health/health.module.js';
+import { ObservabilityModule } from './observability/observability.module.js';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
   imports: [
@@ -37,6 +39,8 @@ import { HealthModule } from './health/health.module.js';
     ReputacaoModule,
     DatabaseModule,
     HealthModule,
+    EventEmitterModule.forRoot(),
+    ObservabilityModule,
   ],
   controllers: [AppController],
   providers: [

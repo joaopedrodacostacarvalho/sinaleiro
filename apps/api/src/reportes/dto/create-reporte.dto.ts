@@ -8,6 +8,7 @@ import {
 } from '@sinaleiro/types/enums';
 import {
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -107,4 +108,14 @@ export class CreateReporteDto {
   @Min(-180)
   @Max(180)
   longitude?: number;
+
+  @ApiPropertyOptional({
+    enum: [0, 5, 10, 15],
+    description: 'Há quantos minutos o trem foi visto na estação (0 = Agora)',
+  })
+
+  @IsOptional()
+  @IsInt()
+  @IsIn([0, 5, 10, 15])
+  offset_minutos?: 0 | 5 | 10 | 15;
 }

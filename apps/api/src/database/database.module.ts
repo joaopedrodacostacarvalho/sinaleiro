@@ -24,14 +24,12 @@ const migrationExt = import.meta.url.endsWith('.ts') ? '.ts' : '.js';
         const migrationsRun =
           process.env.TYPEORM_MIGRATIONS_RUN != null
             ? process.env.TYPEORM_MIGRATIONS_RUN === 'true'
-            : isProd || isTest;
+            : true;
 
         const synchronize =
           isProd || migrationsRun
             ? false
-            : process.env.TYPEORM_SYNCHRONIZE != null
-              ? process.env.TYPEORM_SYNCHRONIZE === 'true'
-              : true;
+            : process.env.TYPEORM_SYNCHRONIZE === 'true';
 
         const database = isTest
           ? (process.env.E2E_DB_NAME || 'sinaleiro_test')

@@ -16,6 +16,7 @@ const MINUTOS_EXPIRACAO: Record<TipoReporte, number> = {
 
 const JANELA_DUPLICATA_MS = 5 * 60_000;
 const RAIO_REPORTE_METROS = 2_000;
+const FATOR_CONFIANCA_SEM_GPS = 0.5;
 
 export function calcularExpiracao(tipo: TipoReporte, agora: Date = new Date()): Date {
   return new Date(agora.getTime() + MINUTOS_EXPIRACAO[tipo] * 60_000);
@@ -32,7 +33,10 @@ export function calcularConfiancaInicialComPeso(
   peso: number,
   distanciaMetros: number | null,
 ): number {
-  if (distanciaMetros !== null && distanciaMetros > RAIO_REPORTE_METROS) return 0;
+  if (distanciaMetros === null) {
+    return Math.round(peso * 10 * FATOR_CONFIANCA_SEM_GPS);
+  }
+  if (distanciaMetros > RAIO_REPORTE_METROS) return 0;
   return Math.round(peso * 10);
 }
 
@@ -93,6 +97,9 @@ export function assertAlvoCoerente(dto: AlvoReporte): void {
       throw new BadRequestException(
         'Reporte de trem não aceita status_estacao/status_linha',
       );
+    }
+    if (p.id_vagao && dto.id_vagao!.trim().length === 0) {
+      throw new BadRequestException('id_vagao não pode ser vazio');
     }
   }
 }

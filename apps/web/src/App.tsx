@@ -1,7 +1,7 @@
 import { Box, CircularProgress } from '@mui/material';
-import { useAuth } from './auth/AuthContext';
 import { Login } from './pages/Login';
 import { Home } from './pages/Home';
+import { useAuth } from './auth/useAuth';
 
 function App() {
 

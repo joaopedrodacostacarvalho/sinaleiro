@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 import { Key, Login as LoginIcon, Train } from '@mui/icons-material';
 import { apiFetch, ApiError } from '../api/client';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 
 type ModoLogin = 'GOOGLE' | 'TOKEN';
 

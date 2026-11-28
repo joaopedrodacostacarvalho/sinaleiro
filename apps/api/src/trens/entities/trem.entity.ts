@@ -23,4 +23,10 @@ export class Trem {
 
   @OneToMany(() => Reporte, (reporte) => reporte.trem)
   reportes: Relation<Reporte[]>;
+
+  @Column({ type: 'int', nullable: true })
+  estacao_atual_id!: number | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  ultimo_avistamento_em!: Date | null;
 }

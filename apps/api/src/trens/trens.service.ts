@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThan, Repository } from 'typeorm';
+import { In, MoreThan, Repository } from 'typeorm';
 import { Sentido, TipoReporte } from '@sinaleiro/types/enums';
 
 import { CreateTremDto } from './dto/create-trem.dto.js';
@@ -131,7 +131,7 @@ export class TrensService {
       return [];
     }
 
-    const trens = await this.tremRepo.find();
+    const trens = await this.tremRepo.find({ where: { id: In(Array.from(porTrem.keys())) } })
     const trensPorId = new Map(trens.map((t) => [t.id, t]));
 
     return Array.from(porTrem.entries()).map(([trem_id, ultimo_reporte]) => ({

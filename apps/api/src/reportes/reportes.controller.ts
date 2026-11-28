@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -48,7 +49,7 @@ export class ReportesController {
   @UseGuards(FirebaseAuthGuard)
   @ApiOperation({ summary: 'Confirmar ou discordar de um reporte ativo' })
   confirmar(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() body: CreateConfirmacaoDto,
     @CurrentUser() usuario: Usuario,
   ) {
@@ -70,19 +71,28 @@ export class ReportesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Buscar reporte por ID' })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.reportesService.findOne(id);
   }
 
   @Patch(':id')
   @UseGuards(FirebaseAuthGuard)
-  update(@Param('id') id: string, @Body() updateReporteDto: UpdateReporteDto) {
-    return this.reportesService.update(id, updateReporteDto);
+  @ApiOperation({ summary: 'Atualizar o status de um reporte próprio ativo' })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateReporteDto: UpdateReporteDto,
+    @CurrentUser() usuario: Usuario,
+  ) {
+    return this.reportesService.update(id, updateReporteDto, usuario);
   }
 
   @Delete(':id')
   @UseGuards(FirebaseAuthGuard)
-  remove(@Param('id') id: string) {
-    return this.reportesService.remove(id);
+  @ApiOperation({ summary: 'Excluir um reporte próprio' })
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() usuario: Usuario,
+  ) {
+    return this.reportesService.remove(id, usuario);
   }
 }

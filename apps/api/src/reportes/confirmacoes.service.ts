@@ -1,12 +1,15 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
+import type { MapaStreamPayload } from '@sinaleiro/types';
 import { TipoConfirmacao, TipoReporte } from '@sinaleiro/types/enums';
 
 import { Reporte } from './entities/reporte.entity.js';
@@ -43,6 +46,8 @@ export class ConfirmacoesService {
     private readonly reputacaoService: ReputacaoService,
     @Optional()
     private readonly statusService?: StatusService,
+    @Optional()
+    private readonly eventEmitter?: EventEmitter2,
   ) { }
 
   async confirmar(
@@ -62,8 +67,8 @@ export class ConfirmacoesService {
 
     // Regra 4.1.1 — Autor não pode confirmar/discordar do próprio reporte
     if (reporte.usuario_id === usuario.id) {
-      throw new BadRequestException(
-        'O autor não pode confirmar ou discordar do próprio reporte',
+      throw new ForbiddenException(
+        'Você não pode confirmar ou discordar do seu próprio reporte.',
       );
     }
 
@@ -139,6 +144,7 @@ export class ConfirmacoesService {
         );
       } else if (decisao === 'REFUTADO') {
         reporte.ativo = false;
+        reporte.confianca = 0;
       }
 
       let reputacaoUsuario = usuario.reputacao;
@@ -182,17 +188,25 @@ export class ConfirmacoesService {
       };
     };
 
-    if (typeof this.reporteRepo.manager?.transaction === 'function') {
-      return this.reporteRepo.manager.transaction((manager) =>
-        executarTransacao(
-          manager.getRepository(Reporte),
-          manager.getRepository(ConfirmacaoReporte),
-          manager,
-        ),
-      );
-    }
+    const resultado =
+      typeof this.reporteRepo.manager?.transaction === 'function'
+        ? await this.reporteRepo.manager.transaction((manager) =>
+          executarTransacao(
+            manager.getRepository(Reporte),
+            manager.getRepository(ConfirmacaoReporte),
+            manager,
+          ),
+        )
+        : await executarTransacao(this.reporteRepo, this.confirmacaoRepo);
 
-    return executarTransacao(this.reporteRepo, this.confirmacaoRepo);
+    // Emite SSE após o COMMIT da transação para refletir o novo estado/contagem
+    this.eventEmitter?.emit('mapa.atualizado', {
+      tipo: 'mapa_atualizado',
+      origem: 'reporte_confirmado',
+      timestamp: new Date().toISOString(),
+    } satisfies MapaStreamPayload);
+
+    return resultado;
   }
 
   private async resolverCoordenadaEstacao(

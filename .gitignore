@@ -8,17 +8,21 @@ build/
 **/dist/
 **/build/
 *.tsbuildinfo
+**/*.tsbuildinfo
 apps/api/test/*.js
-apps/api/test/*.d.ts 
+apps/api/test/*.d.ts
 apps/api/test/*.map
 
 # Variáveis de ambiente e segredos
 .env
 .env.*
-!.env.example
+!.env*.example
 **/.env
 **/.env.*
-!**/.env.example
+!**/.env*.example
+*.pem
+*.key
+*firebase-adminsdk*.json
 
 # Logs
 logs/
@@ -32,6 +36,8 @@ pnpm-debug.log*
 coverage/
 **/coverage/
 .nyc_output/
+.vitest/
+**/.vitest/
 
 # Editores e IDEs
 .vscode/*
