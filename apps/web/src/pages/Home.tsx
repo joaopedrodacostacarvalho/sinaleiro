@@ -60,7 +60,6 @@ import {
   TipoReporte,
   type Reporte,
 } from '../api/types';
-import { useAuth } from '../auth/AuthContext';
 import { MapaMetrorec } from '../components/MapaMetrorec';
 import { StatusIcon } from '../components/StatusIcon';
 import {
@@ -73,6 +72,7 @@ import {
 } from '../constants/statusVisual';
 import { useEstacoesProximas } from '../hooks/estacoesProximas';
 import { useGeolocation } from '../hooks/useGeolocation';
+import { useAuth } from '../auth/useAuth';
 
 type AbaReporte = 'ESTACAO' | 'TREM' | 'LINHA';
 

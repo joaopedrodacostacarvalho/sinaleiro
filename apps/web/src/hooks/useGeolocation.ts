@@ -8,21 +8,26 @@ interface GeolocationState {
 }
 
 export function useGeolocation(): GeolocationState {
-  const [state, setState] = useState<GeolocationState>({
-    coords: null,
-    accuracy: null,
-    error: null,
-    loading: true,
-  });
-
-  useEffect(() => {
+  const [state, setState] = useState<GeolocationState>(() => {
     if (!('geolocation' in navigator)) {
-      setState({
+      return {
         coords: null,
         accuracy: null,
         error: 'Geolocalização indisponível neste navegador',
         loading: false,
-      });
+      };
+    }
+
+    return {
+      coords: null,
+      accuracy: null,
+      error: null,
+      loading: true,
+    };
+  });
+
+  useEffect(() => {
+    if (!('geolocation' in navigator)) {
       return;
     }
 
